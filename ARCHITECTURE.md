@@ -72,6 +72,27 @@ Nesta fase, o GatwayWG **não executa IA**. A execução de IA permanece no **We
 - **iVMS/DVR/VMS:** `rtsp://<gateway_ip>:8554/<camera_uuid>`
 - **Operação humana (baixa latência):** WebRTC (go2rtc)
 
+### 3.5 Mapeamento mínimo de erros da API de cadastro
+
+| Operação | Código | Quando ocorre | Ação recomendada |
+|---|---|---|---|
+| `POST /cameras/` | `400 Bad Request` | Payload inválido/ausente | Corrigir campos obrigatórios e formato. |
+| `POST /cameras/` | `409 Conflict` | `camera_uuid` já cadastrado | Evitar duplicidade; atualizar registro existente. |
+| `DELETE /cameras/{uuid}` | `404 Not Found` | UUID não encontrado no inventário | Reconciliar inventário local antes de remover. |
+
+### 3.6 Convenção de nomenclatura (multi-site)
+
+#### `camera_uuid`
+
+- Deve ser estável e único globalmente (preferencialmente UUID v4).
+- Não deve codificar semântica operacional mutável (ex.: ala/leito), apenas identidade técnica.
+
+#### `name`
+
+- Formato recomendado: `<site>-<setor>-<ponto>`.
+- Exemplo: `hospital-a-uti02-leito07`.
+- Usar letras minúsculas e hífen para padronizar pesquisa, filtros e inventário.
+
 ## 4. Matriz de compatibilidade de fontes (operação em campo)
 
 | Fonte | Método de entrada | Status nesta fase | Observações operacionais |
