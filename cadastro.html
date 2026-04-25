@@ -137,9 +137,9 @@ async function checkMasterStatus() {
 // Verifica go2rtc
 async function checkGo2rtcStatus() {
   try {
-    const res = await fetch('http://localhost:1984/api/streams');
+    const res = await fetch('/go2rtc/health');
     const span = document.getElementById('go2rtcStatus');
-    if (res.ok) {
+    if (res.ok && (await res.json()).online) {
       span.innerHTML = 'Online';
       span.className = 'tag tag-green';
     } else {
@@ -182,12 +182,14 @@ function renderList() {
         <div class="cam-name">${escapeHtml(cam.name)}</div>
         <div class="cam-details">
           UUID: ${cam.uuid}<br/>
-          ${cam.type}: ${escapeHtml(cam.path)}<br/>
+          ${(cam.source_type || cam.type)}: ${escapeHtml(cam.source_url || cam.path)}<br/>
+          RTSP: ${escapeHtml(cam.urls?.rtsp_url || 'n/d')}<br/>
+          WebRTC: ${escapeHtml(cam.urls?.webrtc_url || 'n/d')}<br/>
           Plugins: ${cam.plugins?.join(', ') || 'Nenhum'}
         </div>
       </div>
       <div class="cam-actions">
-        <button class="btn btn-sm" onclick="testStream('${cam.uuid}')">▶️ Testar</button>
+        <button class="btn btn-sm" title="Fluxo legado/fallback MJPEG" onclick="testStream('${cam.uuid}')">▶️ Testar (fallback)</button>
         <button class="btn btn-sm btn-danger" onclick="deleteCamera('${cam.uuid}')">🗑️</button>
       </div>
     </div>
@@ -211,13 +213,14 @@ async function saveCamera() {
   const payload = {
     uuid: generateUUID(),
     name: name,
-    type: document.getElementById('sourceType').value,
-    path: path,
-    node: document.getElementById('clusterNode').value,
-    pipeline: 'batch',
-    videoWall: true,
+    source_type: document.getElementById('sourceType').value,
+    source_url: path,
+    stream_name: '',
+    enabled: true,
+    video_wall: false,
     plugins: plugins,
-    createdAt: new Date().toISOString()
+    node: document.getElementById('clusterNode').value,
+    created_at: new Date().toISOString()
   };
   
   try {
@@ -240,6 +243,7 @@ async function saveCamera() {
 
 // Testar stream
 function testStream(uuid) {
+  alert('Abrindo stream legado/fallback MJPEG. Para produção, use URLs RTSP/WebRTC retornadas pelo Gateway.');
   window.open(`/stream/${uuid}`, '_blank');
 }
 

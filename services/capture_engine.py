@@ -4,7 +4,6 @@ import logging
 import av
 import cv2
 from decord import VideoReader, cpu
-import numpy as np
 
 # Configuração de Watchdog/Log
 logger = logging.getLogger("CaptureEngine")
