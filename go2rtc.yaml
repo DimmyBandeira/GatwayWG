@@ -7,10 +7,10 @@ api:
   listen: "0.0.0.0:1984" # 🚀 Habilita a Web UI e a API REST (ESSENCIAL para o orquestrador Python)
   origin: "*"
 rtsp:
-  listen: ":8554" # Porta para os streams RTSP "limpos" (para o YOLO / DeepStream)
+  listen: ":8554" # Porta para streams RTSP limpos (WebGuardião e VMS/DVR/iVMS)
 
 webrtc:
-  listen: ":8555" # Porta para a transmissão de ultra baixa latência (para a interface PyQt6)
+  listen: ":8555" # Porta para transmissão de ultra baixa latência (monitoramento do operador)
 
 
 # ---------------------------------------------------------
