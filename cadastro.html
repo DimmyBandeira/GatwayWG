@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Gateway - Teste</title>
+<style>
+  *{box-sizing:border-box}
+  body{ margin:0; background:#f0f2f5; font:14px system-ui, sans-serif; }
+  .container{max-width:1200px; margin:0 auto; padding:20px}
+  
+  /* Cards */
+  .card{background:#fff; border-radius:12px; padding:20px; margin-bottom:20px; box-shadow:0 1px 3px rgba(0,0,0,0.1)}
+  .card-title{font-size:18px; font-weight:600; margin:0 0 16px; padding-bottom:8px; border-bottom:1px solid #e5e7eb}
+  
+  /* Form */
+  .form-row{display:flex; gap:16px; flex-wrap:wrap; margin-bottom:16px}
+  .form-group{flex:1; min-width:200px}
+  .form-group label{display:block; margin-bottom:6px; font-weight:500}
+  .form-group input, .form-group select{width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:8px}
+  .form-group input:focus{border-color:#1677ff; outline:none}
+  
+  .checkbox-group{display:flex; gap:16px; margin:16px 0; flex-wrap:wrap}
+  .checkbox-group label{display:flex; align-items:center; gap:6px; cursor:pointer}
+  
+  /* Botões */
+  .btn{padding:8px 16px; border-radius:8px; border:1px solid #d1d5db; background:#fff; cursor:pointer}
+  .btn-primary{background:#1677ff; color:#fff; border-color:#1677ff}
+  .btn-danger{color:#dc2626; border-color:#dc2626}
+  .btn-sm{padding:4px 10px; font-size:12px}
+  
+  /* Lista */
+  .cam-item{display:flex; justify-content:space-between; align-items:center; padding:12px; border:1px solid #e5e7eb; border-radius:8px; margin-bottom:8px}
+  .cam-info{flex:1}
+  .cam-name{font-weight:600; margin-bottom:4px}
+  .cam-details{font-size:12px; color:#6b7280}
+  .cam-actions{display:flex; gap:8px}
+  
+  .tag{display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px}
+  .tag-green{background:#dcfce7; color:#166534}
+  .tag-red{background:#fee2e2; color:#991b1b}
+  
+  .loading{text-align:center; padding:20px; color:#6b7280}
+  .spinner{display:inline-block; width:16px; height:16px; border:2px solid #e5e7eb; border-top-color:#1677ff; border-radius:50%; animation:spin 0.6s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="container">
+  <!-- Status -->
+  <div class="card">
+    <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap">
+      <span>🔌 Master: <span id="masterStatus" class="tag tag-green">Online</span></span>
+      <span>📡 go2rtc: <span id="go2rtcStatus" class="tag tag-green">Online</span></span>
+      <button class="btn btn-sm" onclick="refreshStatus()">Atualizar</button>
+    </div>
+  </div>
+
+  <!-- Formulário de Cadastro -->
+  <div class="card">
+    <div class="card-title">+ Nova Câmera</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Nome *</label>
+        <input type="text" id="camName" placeholder="Ex: Recepção"/>
+      </div>
+      <div class="form-group">
+        <label>URL/Path *</label>
+        <input type="text" id="sourcePath" placeholder="rtsp://..."/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Tipo</label>
+        <select id="sourceType">
+          <option value="rtsp">RTSP</option>
+          <option value="file">Arquivo</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Worker</label>
+        <select id="clusterNode">
+          <option value="auto">Automático</option>
+          <option value="worker-01">Worker-01</option>
+        </select>
+      </div>
+    </div>
+    <div class="checkbox-group">
+      <label><input type="checkbox" id="pluginYolo" checked/> YOLO (Pessoas)</label>
+      <label><input type="checkbox" id="pluginFace"/> Face ID</label>
+    </div>
+    <button class="btn btn-primary" onclick="saveCamera()">💾 Cadastrar</button>
+  </div>
+
+  <!-- Lista de Câmeras -->
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
+      <div class="card-title" style="margin:0; border:none; padding:0">📷 Câmeras</div>
+      <span id="camCount" class="tag">0</span>
+    </div>
+    <div id="camerasList">
+      <div class="loading">Carregando...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+let cameras = [];
+
+// Gera UUID simples
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+// Verifica status do Master
+async function checkMasterStatus() {
+  try {
+    const res = await fetch('/health');
+    const span = document.getElementById('masterStatus');
+    if (res.ok) {
+      span.innerHTML = 'Online';
+      span.className = 'tag tag-green';
+    } else {
+      span.innerHTML = 'Offline';
+      span.className = 'tag tag-red';
+    }
+  } catch {
+    document.getElementById('masterStatus').innerHTML = 'Offline';
+    document.getElementById('masterStatus').className = 'tag tag-red';
+  }
+}
+
+// Verifica go2rtc
+async function checkGo2rtcStatus() {
+  try {
+    const res = await fetch('http://localhost:1984/api/streams');
+    const span = document.getElementById('go2rtcStatus');
+    if (res.ok) {
+      span.innerHTML = 'Online';
+      span.className = 'tag tag-green';
+    } else {
+      span.innerHTML = 'Offline';
+      span.className = 'tag tag-red';
+    }
+  } catch {
+    document.getElementById('go2rtcStatus').innerHTML = 'Offline';
+    document.getElementById('go2rtcStatus').className = 'tag tag-red';
+  }
+}
+
+// Carrega lista do servidor
+async function loadCameras() {
+  const container = document.getElementById('camerasList');
+  container.innerHTML = '<div class="loading"><div class="spinner"></div> Carregando...</div>';
+  
+  try {
+    const res = await fetch('/cameras/');
+    if (!res.ok) throw new Error();
+    cameras = await res.json();
+    renderList();
+  } catch (err) {
+    container.innerHTML = '<div class="loading">❌ Erro ao conectar com o servidor</div>';
+  }
+}
+
+function renderList() {
+  const container = document.getElementById('camerasList');
+  document.getElementById('camCount').innerHTML = cameras.length;
+  
+  if (cameras.length === 0) {
+    container.innerHTML = '<div class="loading">Nenhuma câmera cadastrada</div>';
+    return;
+  }
+  
+  container.innerHTML = cameras.map(cam => `
+    <div class="cam-item">
+      <div class="cam-info">
+        <div class="cam-name">${escapeHtml(cam.name)}</div>
+        <div class="cam-details">
+          UUID: ${cam.uuid}<br/>
+          ${cam.type}: ${escapeHtml(cam.path)}<br/>
+          Plugins: ${cam.plugins?.join(', ') || 'Nenhum'}
+        </div>
+      </div>
+      <div class="cam-actions">
+        <button class="btn btn-sm" onclick="testStream('${cam.uuid}')">▶️ Testar</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteCamera('${cam.uuid}')">🗑️</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+// Salvar nova câmera
+async function saveCamera() {
+  const name = document.getElementById('camName').value.trim();
+  const path = document.getElementById('sourcePath').value.trim();
+  
+  if (!name || !path) {
+    alert('Preencha Nome e URL/Path');
+    return;
+  }
+  
+  const plugins = [];
+  if (document.getElementById('pluginYolo').checked) plugins.push('YOLO');
+  if (document.getElementById('pluginFace').checked) plugins.push('Face ID');
+  
+  const payload = {
+    uuid: generateUUID(),
+    name: name,
+    type: document.getElementById('sourceType').value,
+    path: path,
+    node: document.getElementById('clusterNode').value,
+    pipeline: 'batch',
+    videoWall: true,
+    plugins: plugins,
+    createdAt: new Date().toISOString()
+  };
+  
+  try {
+    const res = await fetch('/cameras/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!res.ok) throw new Error();
+    
+    document.getElementById('camName').value = '';
+    document.getElementById('sourcePath').value = '';
+    await loadCameras();
+    alert(`✅ Câmera "${name}" cadastrada`);
+  } catch (err) {
+    alert('❌ Erro ao cadastrar');
+  }
+}
+
+// Testar stream
+function testStream(uuid) {
+  window.open(`/stream/${uuid}`, '_blank');
+}
+
+// Deletar
+async function deleteCamera(uuid) {
+  const cam = cameras.find(c => c.uuid === uuid);
+  if (!confirm(`Remover "${cam?.name}"?`)) return;
+  
+  try {
+    const res = await fetch(`/cameras/${uuid}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error();
+    await loadCameras();
+  } catch {
+    alert('❌ Erro ao remover');
+  }
+}
+
+async function refreshStatus() {
+  await checkMasterStatus();
+  await checkGo2rtcStatus();
+  await loadCameras();
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Inicializa
+refreshStatus();
+setInterval(checkMasterStatus, 30000);
+setInterval(checkGo2rtcStatus, 30000);
+</script>
+</body>
+</html>

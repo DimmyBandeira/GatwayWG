@@ -1,0 +1,311 @@
+
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>WebAcesso + WebGuardião — Mock UI</title>
+<style>
+  :root{
+    --bg:#f7f8fb;
+    --card:#ffffff;
+    --ink:#0f172a;
+    --muted:#64748b;
+    --primary:#1677ff;
+    --success:#10b981;
+    --warning:#f59e0b;
+    --danger:#ef4444;
+    --ring:#e5e7eb;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:linear-gradient(#fbfdff,#f3f6fb);
+    color:var(--ink); font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;
+  }
+  .app{display:grid; grid-template-columns: 256px 1fr; min-height:100vh}
+  /* Sidebar */
+  .side{background:#0b1220; color:#e2e8f0; padding:12px; display:flex; flex-direction:column; gap:8px; box-shadow: 6px 0 24px rgba(16,24,40,.12)}
+  .brand{display:flex; gap:8px; align-items:center; padding:10px 8px; border-radius:12px; background:#111827}
+  .brand b{letter-spacing:.5px}
+  .nav a{display:flex; align-items:center; gap:10px; padding:10px 12px; color:#d1d5db; text-decoration:none; border-radius:10px}
+  .nav a:hover{background:#111827}
+  .nav a.active{background:#111827; color:#fff; outline:1px solid rgba(255,255,255,.06)}
+  .badge{background:#4f46e5; padding:2px 6px; border-radius:6px; font-size:10px; color:#fff}
+  .side .foot{margin-top:auto; color:#94a3b8; font-size:12px; padding:8px}
+  /* Header */
+  header{backdrop-filter:saturate(1.2) blur(6px); position:sticky; top:0; z-index:2; background:rgba(255,255,255,.75); border-bottom:1px solid var(--ring)}
+  header .row{display:flex; justify-content:space-between; align-items:center; padding:12px 20px}
+  .search{display:flex; gap:8px; align-items:center}
+  .search input{padding:10px 12px; width:260px; border:1px solid var(--ring); border-radius:12px}
+  .btn{border:1px solid var(--ring); background:#fff; border-radius:12px; padding:10px 14px; cursor:pointer}
+  .btn.primary{background:var(--primary); color:#fff; border-color:var(--primary)}
+  .btn.ghost{background:transparent; border-color:transparent; color:#475569}
+  /* Main grid */
+  main{padding:20px; display:grid; grid-template-columns: 1fr 420px; gap:20px}
+  .cards{display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:14px}
+  .card{background:var(--card); border:1px solid var(--ring); border-radius:18px; padding:14px}
+  .title{font-size:14px; color:var(--muted); margin:0 0 6px}
+  .value{font-size:26px; font-weight:700}
+  .pill{display:inline-block; padding:2px 8px; border-radius:999px; color:#fff; font-size:11px}
+  .pill.up{background:var(--success)} .pill.down{background:var(--danger)}
+  /* Chart */
+  .chart{height:260px}
+  .legend{display:flex; gap:12px; align-items:center; font-size:12px; color:var(--muted)}
+  .legend span::before{content:\"\"; display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:6px; background:currentColor}
+  /* Cameras */
+  .cams{display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:10px}
+  .cam{position:relative; aspect-ratio:16/9; background:#f3f4f6; border:1px solid var(--ring); border-radius:14px; display:flex; align-items:center; justify-content:center; color:#94a3b8}
+  .cam .meta{position:absolute; top:8px; left:8px; display:flex; gap:6px}
+  .tag{background:#eef2ff; color:#3730a3; padding:2px 8px; border-radius:8px; font-size:11px; border:1px solid #e0e7ff}
+  .tag.ok{background:#ecfdf5; color:#065f46; border-color:#d1fae5}
+  .play{position:absolute; right:8px; bottom:8px}
+  /* Alerts */
+  .list{display:flex; flex-direction:column; gap:8px; max-height:540px; overflow:auto}
+  .item{display:flex; gap:10px; border:1px solid var(--ring); background:#fff; border-radius:12px; padding:10px}
+  .dot{width:10px; height:10px; border-radius:50%}
+  .lv-crit{background:var(--danger)} .lv-alto{background:#d97706} .lv-med{background:#fbbf24} .lv-low{background:#94a3b8}
+  .i-head{display:flex; gap:8px; align-items:center; font-size:12px; color:var(--muted)}
+  .i-actions{display:flex; gap:6px; margin-top:8px}
+  .btn.sm{padding:6px 10px; border-radius:10px; font-size:12px}
+  .filters{display:flex; gap:8px; font-size:12px}
+  select{padding:8px 10px; border:1px solid var(--ring); border-radius:10px}
+  /* Presets */
+  .preset{display:grid; grid-template-columns:1fr auto; align-items:center; gap:12px; padding:10px; border:1px solid var(--ring); border-radius:12px}
+  .row{display:flex; gap:10px; align-items:center}
+  .toggle{width:42px; height:24px; border-radius:999px; background:#e5e7eb; position:relative; cursor:pointer; border:1px solid var(--ring)}
+  .toggle input{display:none}
+  .toggle::after{content:\"\"; position:absolute; top:2px; left:2px; width:18px; height:18px; background:#fff; border-radius:50%; box-shadow:0 1px 2px rgba(0,0,0,.15); transition:transform .15s}
+  .toggle.on{background:#c7d2fe; border-color:#a5b4fc}
+  .toggle.on::after{transform:translateX(18px)}
+  /* Responsive */
+  @media (max-width:1200px){ main{grid-template-columns:1fr} .cams{grid-template-columns:repeat(2,1fr)} }
+  @media (max-width:900px){ .app{grid-template-columns: 80px 1fr} .brand b{display:none} .cards{grid-template-columns: repeat(2,1fr)} .cams{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="side">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="#60a5fa"><path d="M4 11h16v2H4zM4 6h16v2H4zM4 16h10v2H4z"/></svg>
+      <b>WEBACESSO</b>
+    </div>
+    <nav class="nav">
+      <a class="active" href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="#9ca3af"><path d="M3 12l9-9 9 9h-2v8a1 1 0 0 1-1 1h-4v-6H10v6H6a1 1 0 0 1-1-1v-8H3z"/></svg>Dashboard</a>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="#9ca3af"><path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-3.33 0-10 1.67-10 5v2h20v-2c0-3.33-6.67-5-10-5z"/></svg>Visitantes</a>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="#9ca3af"><path d="M3 5h18v14H3zM5 7h14v10H5z"/></svg>Câmeras</a>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="#9ca3af"><path d="M12 2l4 4-4 4-4-4 4-4zm0 12l4 4-4 4-4-4 4-4z"/></svg>WebGuardião <span class="badge">IA</span></a>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="#9ca3af"><path d="M12 6a6 6 0 1 0 6 6 6.006 6.006 0 0 0-6-6zm-1 9V9h2v6z"/></svg>Processamento</a>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="#9ca3af"><path d="M12 8a4 4 0 1 0 4 4 4 4 0 0 0-4-4zm8 4a8 8 0 1 1-8-8 8.009 8.009 0 0 1 8 8zM7 22h10v-2H7z"/></svg>Configurações</a>
+    </nav>
+    <div class="foot">v0.9 • demo</div>
+  </aside>
+
+  <!-- Main column -->
+  <section>
+    <header>
+      <div class="row">
+        <div style="display:flex;gap:10px;align-items:center;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="#475569"><path d="M12 22a10 10 0 1 1 10-10 10.011 10.011 0 0 1-10 10zm1-10V7h-2v7h6v-2z"/></svg>
+          <span style="color:#334155">Central de Monitoramento</span>
+          <span style="margin:0 10px;color:#94a3b8">|</span>
+          <span class="badge" style="background:#0ea5e9">Matriz</span>
+        </div>
+        <div class="search">
+          <input placeholder="Buscar (visitante, câmera, alerta)"/>
+          <button class="btn">Relatórios</button>
+          <button class="btn primary">Notificar CSS</button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <!-- Left column -->
+      <div style="display:flex;flex-direction:column;gap:20px;">
+        <!-- KPIs -->
+        <div class="cards" id="kpis"></div>
+
+        <!-- Chart -->
+        <div class="card">
+          <div class="title">Fluxo de acessos vs visitantes (hoje)</div>
+          <div class="chart" id="chart"></div>
+          <div class="legend" style="margin-top:8px">
+            <span style="color:#1677ff">Acessos</span>
+            <span style="color:#0ea5e9">Visitantes</span>
+          </div>
+        </div>
+
+        <!-- Cameras -->
+        <div class="card">
+          <div class="title" style="display:flex;justify-content:space-between;align-items:center">
+            <span> Câmeras </span>
+            <div style="display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted)">
+              <span>Live</span>
+              <div id="liveToggle" class="toggle on" role="switch" aria-checked="true"></div>
+            </div>
+          </div>
+          <div class="cams" id="cams"></div>
+        </div>
+      </div>
+
+      <!-- Right column -->
+      <div style="display:flex;flex-direction:column;gap:20px;">
+        <!-- Alerts -->
+        <div class="card">
+          <div class="title">Alertas em tempo real</div>
+          <div class="filters" style="margin-bottom:8px">
+            <select id="fNivel">
+              <option value="todos">Todos níveis</option>
+              <option value="crítico">Crítico</option>
+              <option value="alto">Alto</option>
+              <option value="médio">Médio</option>
+              <option value="baixo">Baixo</option>
+            </select>
+            <select id="fSetor">
+              <option value="todos">Todos os setores</option>
+              <option value="corredor">Corredor</option>
+              <option value="portaria">Portaria</option>
+              <option value="praça">Praça</option>
+            </select>
+          </div>
+          <div class="list" id="alertList"></div>
+        </div>
+
+        <!-- Presets -->
+        <div class="card">
+          <div class="title">Regras de IA (presets)</div>
+          <div class="preset">
+            <div class="row"><div class="tag">Área restrita</div><div class="muted">Disparar alerta ao detectar pessoa em área crítica</div></div>
+            <div class="toggle on"></div>
+          </div>
+          <div class="preset">
+            <div class="row"><div class="tag">Permanência</div><div class="muted">≥ 60s no mesmo ponto</div></div>
+            <div class="toggle on"></div>
+          </div>
+          <div class="preset">
+            <div class="row"><div class="tag">Temperatura</div><div class="muted">&gt; 35ºC em objeto ou bolsa</div></div>
+            <div class="toggle on"></div>
+          </div>
+          <div class="preset">
+            <div class="row"><div class="tag">Reconhecimento facial</div><div class="muted">Presença fora do andar autorizado</div></div>
+            <div class="toggle on"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </section>
+</div>
+
+<script>
+// ------- Helpers & demo data
+const rnd = (min, max) => Math.floor(Math.random()*(max-min+1))+min
+const now = () => new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})
+const kpis = [
+  {label:'Acessos hoje', value:482, trend:+8},
+  {label:'Visitantes ativos', value:37, trend:-3},
+  {label:'Alertas ativos', value:3, trend:+1},
+  {label:'Câmeras online', value:28, trend:0},
+]
+const cams = [
+  {id:'CAM-01', name:'Recepção', type:'visível'},
+  {id:'CAM-02', name:'Entrada Leste', type:'térmica'},
+  {id:'CAM-03', name:'Corredor Clínico', type:'visível'},
+  {id:'CAM-04', name:'Maternidade', type:'visível'},
+  {id:'CAM-05', name:'Cargas/Descarga', type:'visível'},
+  {id:'CAM-06', name:'Estacionamento', type:'visível'}
+]
+let alerts = [
+  {id:1, level:'alto', time:now(), text:'Pessoa com mochila em área restrita — Bloco B, 2º andar', tag:'WebGuardião', cam:'CAM-12'},
+  {id:2, level:'médio', time:now(), text:'Permanência > 60s — Corredor Clínico', tag:'Comportamento', cam:'CAM-07'},
+  {id:3, level:'crítico', time:now(), text:'Temperatura elevada em objeto — Acesso Leste', tag:'Térmico', cam:'CAM-03'},
+]
+
+// ------- Render KPIs
+document.getElementById('kpis').innerHTML = kpis.map(k => `
+  <div class="card">
+    <div class="title">${k.label}</div>
+    <div class="value">${k.value}</div>
+    <div>${k.trend===0?'<span class="pill" style="background:#64748b">0%</span>':`<span class="pill ${k.trend>0?'up':'down'}">${k.trend>0?'+':''}${k.trend}%</span>`}</div>
+  </div>
+`).join('')
+
+// ------- Simple SVG line chart (no libs)
+;(function() {
+  const data = Array.from({length:12}).map((_,i)=>({h:`${String(i+7).padStart(2,'0')}h`, a:rnd(30,80), v:rnd(10,30)}))
+  const el = document.getElementById('chart')
+  const w = el.clientWidth || 600, h = el.clientHeight || 260, pad=28
+  const xs = i => pad + (i*(w-2*pad)/(data.length-1))
+  const ys = (val,max) => h - pad - (val*(h-2*pad)/max)
+  const maxY = Math.max(...data.map(d=>Math.max(d.a,d.v)))+10
+  const path = (key,color) => data.map((d,i)=>`${i?'L':'M'}${xs(i)},${ys(d[key],maxY)}`).join(' ')
+  const circles = (key,color) => data.map((d,i)=>`<circle cx="${xs(i)}" cy="${ys(d[key],maxY)}" r="2.5" fill="${color}"/>`).join('')
+  const ticks = data.map((d,i)=> i%2?`<text x="${xs(i)}" y="${h-8}" font-size="10" text-anchor="middle" fill="#94a3b8">${d.h}</text>`:'').join('')
+  el.innerHTML = `<svg width="${w}" height="${h}">
+    <rect x="0" y="0" width="${w}" height="${h}" fill="transparent"/>
+    <path d="${path('a','#1677ff')}" fill="none" stroke="#1677ff" stroke-width="2"/>
+    <path d="${path('v','#0ea5e9')}" fill="none" stroke="#0ea5e9" stroke-width="2"/>
+    ${circles('a','#1677ff')}
+    ${circles('v','#0ea5e9')}
+    ${ticks}
+  </svg>`
+})()
+
+// ------- Cameras
+document.getElementById('cams').innerHTML = cams.map(c => `
+  <div class="cam">
+    <div>${c.name} • ${c.id}</div>
+    <div class="meta">
+      <span class="tag">${c.type}</span>
+      <span class="tag ok">online</span>
+    </div>
+    <button class="btn sm play">Assistir</button>
+  </div>
+`).join('')
+
+// ------- Alerts
+function renderAlerts(){
+  const nf = document.getElementById('fNivel').value
+  const sf = document.getElementById('fSetor').value
+  const list = document.getElementById('alertList')
+  const rows = alerts.filter(a=> (nf==='todos'||a.level===nf) && (sf==='todos'||a.text.toLowerCase().includes(sf)))
+    .map(a=>{
+      const lv = a.level==='crítico'?'crit':a.level==='alto'?'alto':a.level==='médio'?'med':'low'
+      return `<div class="item">
+        <div class="dot lv-${lv}"></div>
+        <div style="flex:1;min-width:0">
+          <div class="i-head"><span>${a.time}</span><span>•</span><span>${a.cam}</span><span>•</span><span class="tag">${a.level}</span><span class="tag">${a.tag}</span></div>
+          <div style="margin-top:4px">${a.text}</div>
+          <div class="i-actions">
+            <button class="btn sm primary">Confirmar</button>
+            <button class="btn sm">Escalar</button>
+            <button class="btn sm ghost">Descartar</button>
+          </div>
+        </div>
+      </div>`
+    }).join('')
+  list.innerHTML = rows || '<div style="color:#94a3b8">Nenhum alerta no filtro selecionado.</div>'
+}
+renderAlerts()
+document.getElementById('fNivel').onchange = renderAlerts
+document.getElementById('fSetor').onchange = renderAlerts
+
+// ------- Live toggle + mock event stream
+const liveToggle = document.getElementById('liveToggle')
+let live = true
+liveToggle.onclick = () => { live=!live; liveToggle.classList.toggle('on', live) }
+setInterval(()=>{
+  if(!live) return
+  const pool = [
+    { level:'médio', text:'Objeto abandonado — Praça de Alimentação', tag:'Comportamento', cam:'CAM-05' },
+    { level:'alto', text:'Pessoa ao celular em área crítica — CC', tag:'Comportamento', cam:'CAM-03' },
+    { level:'crítico', text:'Acesso negado repetido — Portão Leste', tag:'Acesso', cam:'CAM-02' },
+    { level:'médio', text:'Tentativa de acesso fora do horário — Portaria', tag:'Acesso', cam:'CAM-01' },
+  ]
+  alerts.unshift({ id:Date.now(), time:now(), ...pool[rnd(0,pool.length-1)] })
+  alerts = alerts.slice(0,12)
+  renderAlerts()
+}, 5000)
+</script>
+</body>
+</html>
