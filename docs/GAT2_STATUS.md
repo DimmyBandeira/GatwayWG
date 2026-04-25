@@ -45,3 +45,23 @@ O Gateway Python atua como **orquestrador de controle**, não como motor de IA:
 3. Contratos formais para consumo do WebGuardião IA por UUID.
 4. Evolução para worker nodes com distribuição de carga de controle.
 5. Monitoramento e telemetria operacional (latência, disponibilidade, falhas de stream).
+
+## GAT 2.2 — Sincronização RegistryService ↔ go2rtc
+
+### Novos endpoints
+
+- `GET /sync/status`
+- `POST /sync/import-go2rtc`
+
+### Conceitos operacionais
+
+- **Cadastrado no Registry**: câmera persistida no JSON local do Gateway.
+- **Existente no go2rtc**: stream presente em `/api/streams` no go2rtc.
+- **Importado**: stream existente no go2rtc que foi gravado no Registry via `POST /sync/import-go2rtc`.
+- **Não publicado**: câmera cadastrada no Registry cujo `stream_name` não foi encontrado no go2rtc.
+
+### Observações de escopo
+
+- Esta etapa não cria/edita streams no go2rtc, apenas importa estado existente.
+- Câmera real/térmica continua para etapa posterior.
+- `CaptureEngine` permanece legado/fallback.

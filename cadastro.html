@@ -39,6 +39,7 @@
   .tag{display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px}
   .tag-green{background:#dcfce7; color:#166534}
   .tag-red{background:#fee2e2; color:#991b1b}
+  .tag-yellow{background:#fef3c7; color:#92400e}
   
   .loading{text-align:center; padding:20px; color:#6b7280}
   .spinner{display:inline-block; width:16px; height:16px; border:2px solid #e5e7eb; border-top-color:#1677ff; border-radius:50%; animation:spin 0.6s linear infinite}
@@ -53,6 +54,7 @@
       <span>🔌 Master: <span id="masterStatus" class="tag tag-green">Online</span></span>
       <span>📡 go2rtc: <span id="go2rtcStatus" class="tag tag-green">Online</span></span>
       <button class="btn btn-sm" onclick="refreshStatus()">Atualizar</button>
+      <button class="btn btn-sm" onclick="importFromGo2rtc()">Importar do go2rtc</button>
     </div>
   </div>
 
@@ -167,6 +169,13 @@ async function loadCameras() {
   }
 }
 
+function formatStatusLabel(status) {
+  if (status === 'online') return 'Online';
+  if (status === 'not_published') return 'Não publicado';
+  if (status === 'go2rtc_offline') return 'go2rtc offline';
+  return 'Indefinido';
+}
+
 function renderList() {
   const container = document.getElementById('camerasList');
   document.getElementById('camCount').innerHTML = cameras.length;
@@ -185,6 +194,7 @@ function renderList() {
           ${(cam.source_type || cam.type)}: ${escapeHtml(cam.source_url || cam.path)}<br/>
           RTSP: ${escapeHtml(cam.urls?.rtsp_url || 'n/d')}<br/>
           WebRTC: ${escapeHtml(cam.urls?.webrtc_url || 'n/d')}<br/>
+          Status: ${formatStatusLabel(cam.status_label)}<br/>
           Plugins: ${cam.plugins?.join(', ') || 'Nenhum'}
         </div>
       </div>
@@ -238,6 +248,21 @@ async function saveCamera() {
     alert(`✅ Câmera "${name}" cadastrada`);
   } catch (err) {
     alert('❌ Erro ao cadastrar');
+  }
+}
+
+async function importFromGo2rtc() {
+  try {
+    const res = await fetch('/sync/import-go2rtc', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Falha na importação');
+    }
+
+    await loadCameras();
+    alert(`Importação concluída: ${data.imported_count} importada(s), ${data.skipped_count} já existente(s).`);
+  } catch (err) {
+    alert(`❌ ${err.message}`);
   }
 }
 

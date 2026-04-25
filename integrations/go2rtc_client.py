@@ -70,6 +70,13 @@ class Go2RTCClient:
     def get_streams_index(self) -> Dict[str, Dict[str, Any]]:
         return self._fetch_streams() or {}
 
+
+    def get_streams_snapshot(self) -> Dict[str, Any]:
+        streams = self._fetch_streams()
+        if streams is None:
+            return {"online": False, "streams": {}}
+        return {"online": True, "streams": streams}
+
     def build_stream_urls(self, stream_name: str) -> Dict[str, str]:
         safe_name = stream_name.strip()
         return {
