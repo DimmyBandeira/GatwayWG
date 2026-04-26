@@ -73,6 +73,13 @@ def _normalize_stream_node(node: Optional[Dict[str, Any]]) -> Optional[Dict[str,
     }
 
 
+
+
+def _sanitize_plugins(plugins: Optional[List[str]]) -> List[str]:
+    values = plugins or []
+    return [item for item in values if str(item).strip().lower() != "yolo"]
+
+
 def _normalize_camera(payload: CameraPayload) -> Dict[str, Any]:
     created_at = payload.created_at or payload.createdAt or _utc_now_iso()
     video_wall = payload.video_wall if payload.video_wall is not None else bool(payload.videoWall)
@@ -129,7 +136,7 @@ def _normalize_camera(payload: CameraPayload) -> Dict[str, Any]:
         "source_type": source_type or "go2rtc",
         "enabled": bool(payload.enabled) if payload.enabled is not None else True,
         "video_wall": bool(video_wall),
-        "plugins": payload.plugins or [],
+        "plugins": _sanitize_plugins(payload.plugins),
         "node": payload.node or "auto",
         "created_at": created_at,
     }

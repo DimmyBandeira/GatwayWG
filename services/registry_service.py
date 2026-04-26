@@ -177,7 +177,8 @@ class RegistryService:
 
         migrated.setdefault("enabled", True)
         migrated.setdefault("video_wall", False)
-        migrated.setdefault("plugins", [])
+        plugins = migrated.get("plugins") if isinstance(migrated.get("plugins"), list) else []
+        migrated["plugins"] = [p for p in plugins if str(p).strip().lower() != "yolo"]
         migrated.setdefault("node", "auto")
         migrated.setdefault("created_at", "")
 
