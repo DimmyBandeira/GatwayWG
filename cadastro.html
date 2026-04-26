@@ -8,57 +8,54 @@
   *{box-sizing:border-box}
   body{ margin:0; background:#f0f2f5; font:14px system-ui, sans-serif; }
   .container{max-width:1200px; margin:0 auto; padding:20px}
-  
-  /* Cards */
   .card{background:#fff; border-radius:12px; padding:20px; margin-bottom:20px; box-shadow:0 1px 3px rgba(0,0,0,0.1)}
   .card-title{font-size:18px; font-weight:600; margin:0 0 16px; padding-bottom:8px; border-bottom:1px solid #e5e7eb}
-  
-  /* Form */
   .form-row{display:flex; gap:16px; flex-wrap:wrap; margin-bottom:16px}
-  .form-group{flex:1; min-width:200px}
+  .form-group{flex:1; min-width:220px}
   .form-group label{display:block; margin-bottom:6px; font-weight:500}
   .form-group input, .form-group select{width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:8px}
   .form-group input:focus{border-color:#1677ff; outline:none}
-  
-  .checkbox-group{display:flex; gap:16px; margin:16px 0; flex-wrap:wrap}
-  .checkbox-group label{display:flex; align-items:center; gap:6px; cursor:pointer}
-  
-  /* Botões */
   .btn{padding:8px 16px; border-radius:8px; border:1px solid #d1d5db; background:#fff; cursor:pointer}
   .btn-primary{background:#1677ff; color:#fff; border-color:#1677ff}
   .btn-danger{color:#dc2626; border-color:#dc2626}
   .btn-sm{padding:4px 10px; font-size:12px}
-  
-  /* Lista */
   .cam-item{display:flex; justify-content:space-between; align-items:center; padding:12px; border:1px solid #e5e7eb; border-radius:8px; margin-bottom:8px}
   .cam-info{flex:1}
   .cam-name{font-weight:600; margin-bottom:4px}
   .cam-details{font-size:12px; color:#6b7280}
   .cam-actions{display:flex; gap:8px}
-  
   .tag{display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px}
   .tag-green{background:#dcfce7; color:#166534}
   .tag-red{background:#fee2e2; color:#991b1b}
   .tag-yellow{background:#fef3c7; color:#92400e}
-  
   .loading{text-align:center; padding:20px; color:#6b7280}
-  .spinner{display:inline-block; width:16px; height:16px; border:2px solid #e5e7eb; border-top-color:#1677ff; border-radius:50%; animation:spin 0.6s linear infinite}
-  @keyframes spin{to{transform:rotate(360deg)}}
+  .muted{font-size:12px;color:#6b7280}
+  .stream-list{font-size:12px; color:#374151; border:1px solid #e5e7eb; border-radius:8px; padding:8px; max-height:180px; overflow:auto}
+  .stream-item{padding:6px 0; border-bottom:1px dashed #e5e7eb}
+  .stream-item:last-child{border-bottom:none}
+  .hidden{display:none}
 </style>
 </head>
 <body>
 <div class="container">
-  <!-- Status -->
   <div class="card">
     <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap">
       <span>🔌 Master: <span id="masterStatus" class="tag tag-green">Online</span></span>
       <span>📡 go2rtc: <span id="go2rtcStatus" class="tag tag-green">Online</span></span>
       <button class="btn btn-sm" onclick="refreshStatus()">Atualizar</button>
-      <button class="btn btn-sm" onclick="importFromGo2rtc()">Importar do go2rtc</button>
     </div>
   </div>
 
-  <!-- Formulário de Cadastro -->
+  <div class="card">
+    <div class="card-title">Discovery go2rtc</div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px">
+      <button class="btn btn-sm" onclick="fetchGo2rtcStreams()">Buscar streams do go2rtc</button>
+      <button class="btn btn-sm" onclick="importFromGo2rtc()">Importar streams do go2rtc</button>
+      <span id="importFeedback" class="muted"></span>
+    </div>
+    <div id="go2rtcStreamsList" class="stream-list">Nenhum stream carregado.</div>
+  </div>
+
   <div class="card">
     <div class="card-title">+ Nova Câmera</div>
     <div class="form-row">
@@ -67,16 +64,11 @@
         <input type="text" id="camName" placeholder="Ex: Recepção"/>
       </div>
       <div class="form-group">
-        <label>URL/Path *</label>
-        <input type="text" id="sourcePath" placeholder="rtsp://..."/>
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Tipo</label>
-        <select id="sourceType">
+        <label>Tipo de fonte</label>
+        <select id="sourceType" onchange="onSourceTypeChange()">
           <option value="rtsp">RTSP</option>
           <option value="file">Arquivo</option>
+          <option value="go2rtc">Stream já no go2rtc</option>
         </select>
       </div>
       <div class="form-group">
@@ -87,100 +79,164 @@
         </select>
       </div>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Visible Main</label>
-        <input type="text" id="visibleMain" placeholder="rtsp://... (opcional)"/>
+
+    <div id="rtspFields">
+      <div class="form-row">
+        <div class="form-group"><label>Visible Main stream_name *</label><input type="text" id="rtspVisibleMainName" placeholder="camera-visible-main"/></div>
+        <div class="form-group"><label>Visible Main source_url *</label><input type="text" id="rtspVisibleMainUrl" placeholder="rtsp://..."/></div>
       </div>
-      <div class="form-group">
-        <label>Visible Sub</label>
-        <input type="text" id="visibleSub" placeholder="rtsp://... (opcional)"/>
+      <div class="form-row">
+        <div class="form-group"><label>Visible Sub stream_name (opcional)</label><input type="text" id="rtspVisibleSubName"/></div>
+        <div class="form-group"><label>Visible Sub source_url (opcional)</label><input type="text" id="rtspVisibleSubUrl"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Thermal Main stream_name (opcional)</label><input type="text" id="rtspThermalMainName"/></div>
+        <div class="form-group"><label>Thermal Main source_url (opcional)</label><input type="text" id="rtspThermalMainUrl"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Thermal Sub stream_name (opcional)</label><input type="text" id="rtspThermalSubName"/></div>
+        <div class="form-group"><label>Thermal Sub source_url (opcional)</label><input type="text" id="rtspThermalSubUrl"/></div>
       </div>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Thermal Main</label>
-        <input type="text" id="thermalMain" placeholder="rtsp://... (opcional)"/>
+
+    <div id="fileFields" class="hidden">
+      <div class="form-row">
+        <div class="form-group"><label>Arquivo</label><input type="file" id="fileInput"/></div>
+        <div class="form-group"><label>stream_name</label><input type="text" id="fileStreamName" placeholder="camera-file-main"/></div>
       </div>
-      <div class="form-group">
-        <label>Thermal Sub</label>
-        <input type="text" id="thermalSub" placeholder="rtsp://... (opcional)"/>
+      <div class="form-row">
+        <div class="form-group"><label><input type="checkbox" id="fileIsThermal"/> Arquivo é térmico?</label></div>
+        <div class="form-group"><span class="muted">Limitação atual: será usado o nome/caminho informado no navegador como source_url (sem upload real no backend).</span></div>
       </div>
     </div>
+
+    <div id="go2rtcFields" class="hidden">
+      <div class="form-row">
+        <div class="form-group"><label>Stream no go2rtc</label><select id="go2rtcStreamSelect"></select></div>
+        <div class="form-group"><label><input type="checkbox" id="go2rtcIsThermal"/> Marcar como térmico?</label></div>
+      </div>
+    </div>
+
     <button class="btn btn-primary" onclick="saveCamera()">💾 Cadastrar</button>
   </div>
 
-  <!-- Lista de Câmeras -->
   <div class="card">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
       <div class="card-title" style="margin:0; border:none; padding:0">📷 Câmeras</div>
       <span id="camCount" class="tag">0</span>
     </div>
-    <div id="camerasList">
-      <div class="loading">Carregando...</div>
-    </div>
+    <div id="camerasList"><div class="loading">Carregando...</div></div>
   </div>
 </div>
 
 <script>
 let cameras = [];
+let go2rtcStreams = [];
 
-// Gera UUID simples
 function generateUUID() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
     const r = Math.random() * 16 | 0;
     const v = c === 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16);
   });
 }
 
-// Verifica status do Master
+function safeSlug(text) {
+  return (text || '').toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '');
+}
+
+function makeStream(streamName, sourceUrl) {
+  const sn = (streamName || '').trim();
+  const su = (sourceUrl || '').trim();
+  if (!sn && !su) return null;
+  return { stream_name: sn || null, source_url: su || '' };
+}
+
+function onSourceTypeChange() {
+  const type = document.getElementById('sourceType').value;
+  document.getElementById('rtspFields').classList.toggle('hidden', type !== 'rtsp');
+  document.getElementById('fileFields').classList.toggle('hidden', type !== 'file');
+  document.getElementById('go2rtcFields').classList.toggle('hidden', type !== 'go2rtc');
+}
+
+function renderGo2rtcStreamsList() {
+  const box = document.getElementById('go2rtcStreamsList');
+  const select = document.getElementById('go2rtcStreamSelect');
+  if (!go2rtcStreams.length) {
+    box.innerHTML = 'Nenhum stream encontrado.';
+    select.innerHTML = '<option value="">(nenhum)</option>';
+    return;
+  }
+
+  box.innerHTML = go2rtcStreams.map(s => `<div class="stream-item"><strong>${escapeHtml(s.name)}</strong><br/>${escapeHtml(s.rtsp_url || '')}</div>`).join('');
+  select.innerHTML = go2rtcStreams.map(s => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join('');
+}
+
 async function checkMasterStatus() {
   try {
     const res = await fetch('/health');
     const span = document.getElementById('masterStatus');
-    if (res.ok) {
-      span.innerHTML = 'Online';
-      span.className = 'tag tag-green';
-    } else {
-      span.innerHTML = 'Offline';
-      span.className = 'tag tag-red';
-    }
+    span.innerHTML = res.ok ? 'Online' : 'Offline';
+    span.className = res.ok ? 'tag tag-green' : 'tag tag-red';
   } catch {
     document.getElementById('masterStatus').innerHTML = 'Offline';
     document.getElementById('masterStatus').className = 'tag tag-red';
   }
 }
 
-// Verifica go2rtc
 async function checkGo2rtcStatus() {
   try {
     const res = await fetch('/go2rtc/health');
+    const payload = await res.json();
+    const online = Boolean(res.ok && payload.online);
     const span = document.getElementById('go2rtcStatus');
-    if (res.ok && (await res.json()).online) {
-      span.innerHTML = 'Online';
-      span.className = 'tag tag-green';
-    } else {
-      span.innerHTML = 'Offline';
-      span.className = 'tag tag-red';
-    }
+    span.innerHTML = online ? 'Online' : 'Offline';
+    span.className = online ? 'tag tag-green' : 'tag tag-red';
   } catch {
     document.getElementById('go2rtcStatus').innerHTML = 'Offline';
     document.getElementById('go2rtcStatus').className = 'tag tag-red';
   }
 }
 
-// Carrega lista do servidor
+async function fetchGo2rtcStreams() {
+  const feedback = document.getElementById('importFeedback');
+  feedback.textContent = 'Consultando go2rtc...';
+  try {
+    const res = await fetch('/go2rtc/streams');
+    if (!res.ok) throw new Error('go2rtc offline ou indisponível');
+    go2rtcStreams = await res.json();
+    renderGo2rtcStreamsList();
+    feedback.textContent = `Streams encontrados: ${go2rtcStreams.length}`;
+  } catch (err) {
+    go2rtcStreams = [];
+    renderGo2rtcStreamsList();
+    feedback.textContent = `Erro: ${err.message}`;
+  }
+}
+
+async function importFromGo2rtc() {
+  const feedback = document.getElementById('importFeedback');
+  feedback.textContent = 'Importando...';
+  try {
+    const res = await fetch('/sync/import-go2rtc', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Falha na importação');
+    feedback.textContent = `Importado: ${data.imported_count} | Ignorado: ${data.skipped_count}`;
+    await Promise.all([loadCameras(), fetchGo2rtcStreams()]);
+  } catch (err) {
+    feedback.textContent = `Erro: ${err.message}`;
+  }
+}
+
 async function loadCameras() {
   const container = document.getElementById('camerasList');
-  container.innerHTML = '<div class="loading"><div class="spinner"></div> Carregando...</div>';
-  
+  container.innerHTML = '<div class="loading">Carregando...</div>';
   try {
     const res = await fetch('/cameras/');
     if (!res.ok) throw new Error();
     cameras = await res.json();
     renderList();
-  } catch (err) {
+  } catch {
     container.innerHTML = '<div class="loading">❌ Erro ao conectar com o servidor</div>';
   }
 }
@@ -195,19 +251,18 @@ function formatStatusLabel(status) {
 function renderList() {
   const container = document.getElementById('camerasList');
   document.getElementById('camCount').innerHTML = cameras.length;
-  
   if (cameras.length === 0) {
     container.innerHTML = '<div class="loading">Nenhuma câmera cadastrada</div>';
     return;
   }
-  
+
   container.innerHTML = cameras.map(cam => `
     <div class="cam-item">
       <div class="cam-info">
         <div class="cam-name">${escapeHtml(cam.name)}</div>
         <div class="cam-details">
           UUID: ${cam.uuid}<br/>
-          ${(cam.source_type || cam.type)}: ${escapeHtml(cam.source_url || cam.path)}<br/>
+          stream_count: ${cam.stream_count || 0}<br/>
           RTSP: ${escapeHtml(cam.urls?.rtsp_url || 'n/d')}<br/>
           WebRTC: ${escapeHtml(cam.urls?.webrtc_url || 'n/d')}<br/>
           Status: ${formatStatusLabel(cam.status_label)}<br/>
@@ -222,43 +277,53 @@ function renderList() {
   `).join('');
 }
 
-// Salvar nova câmera
 async function saveCamera() {
   const name = document.getElementById('camName').value.trim();
-  const visibleMain = document.getElementById('visibleMain').value.trim();
-  const visibleSub = document.getElementById('visibleSub').value.trim();
-  const thermalMain = document.getElementById('thermalMain').value.trim();
-  const thermalSub = document.getElementById('thermalSub').value.trim();
+  const sourceType = document.getElementById('sourceType').value;
+  if (!name) return alert('Preencha Nome');
 
-  if (!name) {
-    alert('Preencha Nome');
-    return;
+  const slug = safeSlug(name) || generateUUID();
+  let streams = { visible: { main: null, sub: null }, thermal: { main: null, sub: null } };
+  let sourceUrlCompat = '';
+
+  if (sourceType === 'rtsp') {
+    streams.visible.main = makeStream(document.getElementById('rtspVisibleMainName').value, document.getElementById('rtspVisibleMainUrl').value);
+    streams.visible.sub = makeStream(document.getElementById('rtspVisibleSubName').value, document.getElementById('rtspVisibleSubUrl').value);
+    streams.thermal.main = makeStream(document.getElementById('rtspThermalMainName').value, document.getElementById('rtspThermalMainUrl').value);
+    streams.thermal.sub = makeStream(document.getElementById('rtspThermalSubName').value, document.getElementById('rtspThermalSubUrl').value);
+    if (!streams.visible.main) {
+      return alert('Preencha visible.main (stream_name e/ou source_url) para RTSP.');
+    }
+    sourceUrlCompat = streams.visible.main.source_url || '';
+  } else if (sourceType === 'file') {
+    const fileInput = document.getElementById('fileInput');
+    const filePath = fileInput.value || (fileInput.files && fileInput.files[0] ? fileInput.files[0].name : '');
+    const fileStreamName = document.getElementById('fileStreamName').value.trim() || `${slug}-file-main`;
+    const thermal = document.getElementById('fileIsThermal').checked;
+    const node = makeStream(fileStreamName, filePath);
+    if (!node || !node.source_url) return alert('Selecione um arquivo para source_type=file.');
+    if (thermal) streams.thermal.main = node; else streams.visible.main = node;
+    sourceUrlCompat = node.source_url;
+  } else {
+    const selected = document.getElementById('go2rtcStreamSelect').value;
+    if (!selected) return alert('Selecione um stream do go2rtc.');
+    const found = go2rtcStreams.find(s => s.name === selected);
+    const node = makeStream(selected, found?.producers?.[0]?.url || '');
+    const thermal = document.getElementById('go2rtcIsThermal').checked;
+    if (thermal) streams.thermal.main = node; else streams.visible.main = node;
+    sourceUrlCompat = node.source_url || '';
   }
-
-  const fallbackPath = document.getElementById('sourcePath').value.trim();
-  const type = document.getElementById('sourceType').value;
 
   const payload = {
     uuid: generateUUID(),
-    name: name,
-    source_type: type,
-    source_url: fallbackPath,
-    stream_name: '',
+    name,
+    source_type: sourceType,
+    source_url: sourceUrlCompat,
     enabled: true,
-    video_wall: false,
-    plugins: [],
+    video_wall: true,
     node: document.getElementById('clusterNode').value,
-    created_at: new Date().toISOString(),
-    streams: {
-      visible: {
-        main: visibleMain ? { stream_name: `${name.toLowerCase().replace(/\s+/g, '-')}-visible-main`, source_url: visibleMain } : null,
-        sub: visibleSub ? { stream_name: `${name.toLowerCase().replace(/\s+/g, '-')}-visible-sub`, source_url: visibleSub } : null,
-      },
-      thermal: {
-        main: thermalMain ? { stream_name: `${name.toLowerCase().replace(/\s+/g, '-')}-thermal-main`, source_url: thermalMain } : null,
-        sub: thermalSub ? { stream_name: `${name.toLowerCase().replace(/\s+/g, '-')}-thermal-sub`, source_url: thermalSub } : null,
-      }
-    }
+    plugins: [],
+    streams,
   };
 
   try {
@@ -267,34 +332,22 @@ async function saveCamera() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-
     if (!res.ok) throw new Error();
-
-    document.getElementById('camName').value = '';
-    document.getElementById('sourcePath').value = '';
-    document.getElementById('visibleMain').value = '';
-    document.getElementById('visibleSub').value = '';
-    document.getElementById('thermalMain').value = '';
-    document.getElementById('thermalSub').value = '';
-
     await loadCameras();
     alert(`✅ Câmera "${name}" cadastrada`);
-  } catch (err) {
+  } catch {
     alert('❌ Erro ao cadastrar');
   }
 }
 
-// Testar stream
 function testStream(uuid) {
   alert('Abrindo stream legado/fallback MJPEG. Para produção, use URLs RTSP/WebRTC retornadas pelo Gateway.');
   window.open(`/stream/${uuid}`, '_blank');
 }
 
-// Deletar
 async function deleteCamera(uuid) {
   const cam = cameras.find(c => c.uuid === uuid);
   if (!confirm(`Remover "${cam?.name}"?`)) return;
-  
   try {
     const res = await fetch(`/cameras/${uuid}`, { method: 'DELETE' });
     if (!res.ok) throw new Error();
@@ -305,19 +358,18 @@ async function deleteCamera(uuid) {
 }
 
 async function refreshStatus() {
-  await checkMasterStatus();
-  await checkGo2rtcStatus();
-  await loadCameras();
+  await Promise.all([checkMasterStatus(), checkGo2rtcStatus(), loadCameras()]);
 }
 
 function escapeHtml(text) {
   const div = document.createElement('div');
-  div.textContent = text;
+  div.textContent = text || '';
   return div.innerHTML;
 }
 
-// Inicializa
+onSourceTypeChange();
 refreshStatus();
+fetchGo2rtcStreams();
 setInterval(checkMasterStatus, 30000);
 setInterval(checkGo2rtcStatus, 30000);
 </script>

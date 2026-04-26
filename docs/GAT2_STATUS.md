@@ -85,3 +85,15 @@ O Gateway Python atua como **orquestrador de controle**, não como motor de IA:
 - Sem IA, sem YOLO, sem plugins ativos.
 - Stream térmico é apenas contrato de transporte.
 - `CaptureEngine` permanece legado/fallback.
+
+## GAT 2.4 — UX de discovery e fontes por tipo (cadastro.html)
+
+- UI passa a expor claramente:
+  - **Buscar streams do go2rtc** (`GET /go2rtc/streams`)
+  - **Importar streams do go2rtc** (`POST /sync/import-go2rtc`)
+- Formulário reage por `source_type`:
+  - `rtsp`: campos multi-stream (`visible/thermal` + `main/sub`)
+  - `file`: apenas stream principal (visible ou thermal)
+  - `go2rtc`: seleção de stream descoberto
+- Sem IA/YOLO/plugin ativo por padrão (`plugins: []`).
+- Limitação atual para `file`: sem upload real no backend; `source_url` usa nome/caminho do arquivo informado no navegador.
