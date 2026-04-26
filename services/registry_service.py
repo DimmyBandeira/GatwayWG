@@ -18,9 +18,12 @@ class RegistryService:
     REQUIRED_FIELDS = {
         "uuid",
         "name",
-        "source_type",
-        "source_url",
-        "stream_name",
+        "streams",
+        "has_visible",
+        "has_visible_sub",
+        "has_thermal",
+        "has_thermal_sub",
+        "stream_count",
         "enabled",
         "video_wall",
         "plugins",
@@ -40,6 +43,7 @@ class RegistryService:
         return self._registry.get(uuid)
 
     def add_camera(self, camera: Dict[str, Any]) -> Dict[str, Any]:
+        camera = self._migrate_camera_model(camera)
         self._validate_minimum_fields(camera)
         camera_uuid = camera["uuid"]
 
@@ -48,7 +52,7 @@ class RegistryService:
 
         self._registry[camera_uuid] = camera
         self.save()
-        logger.info("Câmera adicionada ao registro: uuid=%s stream=%s", camera_uuid, camera.get("stream_name"))
+        logger.info("Câmera adicionada ao registro: uuid=%s", camera_uuid)
         return camera
 
     def remove_camera(self, uuid: str) -> bool:
@@ -89,7 +93,15 @@ class RegistryService:
             self._registry = {}
             return self._registry
 
-        self._registry = {str(key): value for key, value in data.items() if isinstance(value, dict)}
+        migrated_registry: Dict[str, Dict[str, Any]] = {}
+        for key, value in data.items():
+            if not isinstance(value, dict):
+                continue
+            migrated = self._migrate_camera_model(value)
+            migrated_registry[str(key)] = migrated
+
+        self._registry = migrated_registry
+        self.save()
         logger.info("Registro carregado: %s câmera(s)", len(self._registry))
         return self._registry
 
@@ -109,3 +121,64 @@ class RegistryService:
 
         if not isinstance(camera.get("plugins"), list):
             raise ValueError("Campo 'plugins' deve ser uma lista")
+
+        if not isinstance(camera.get("streams"), dict):
+            raise ValueError("Campo 'streams' deve ser um objeto")
+
+    def _migrate_camera_model(self, camera: Dict[str, Any]) -> Dict[str, Any]:
+        migrated = dict(camera)
+
+        streams = migrated.get("streams")
+        if not isinstance(streams, dict):
+            stream_name = migrated.get("stream_name")
+            source_url = migrated.get("source_url", "")
+            streams = {
+                "visible": {
+                    "main": {
+                        "stream_name": stream_name,
+                        "source_url": source_url,
+                    },
+                    "sub": None,
+                },
+                "thermal": {
+                    "main": None,
+                    "sub": None,
+                },
+            }
+        else:
+            streams.setdefault("visible", {"main": None, "sub": None})
+            streams.setdefault("thermal", {"main": None, "sub": None})
+            streams["visible"].setdefault("main", None)
+            streams["visible"].setdefault("sub", None)
+            streams["thermal"].setdefault("main", None)
+            streams["thermal"].setdefault("sub", None)
+
+        migrated["streams"] = streams
+
+        visible_main = streams.get("visible", {}).get("main")
+        visible_sub = streams.get("visible", {}).get("sub")
+        thermal_main = streams.get("thermal", {}).get("main")
+        thermal_sub = streams.get("thermal", {}).get("sub")
+
+        migrated["has_visible"] = bool(visible_main and visible_main.get("stream_name"))
+        migrated["has_visible_sub"] = bool(visible_sub and visible_sub.get("stream_name"))
+        migrated["has_thermal"] = bool(thermal_main and thermal_main.get("stream_name"))
+        migrated["has_thermal_sub"] = bool(thermal_sub and thermal_sub.get("stream_name"))
+        migrated["stream_count"] = sum(
+            [migrated["has_visible"], migrated["has_visible_sub"], migrated["has_thermal"], migrated["has_thermal_sub"]]
+        )
+
+        if visible_main:
+            migrated["stream_name"] = visible_main.get("stream_name")
+            migrated["source_url"] = visible_main.get("source_url", "")
+        else:
+            migrated.setdefault("stream_name", None)
+            migrated.setdefault("source_url", "")
+
+        migrated.setdefault("enabled", True)
+        migrated.setdefault("video_wall", False)
+        migrated.setdefault("plugins", [])
+        migrated.setdefault("node", "auto")
+        migrated.setdefault("created_at", "")
+
+        return migrated

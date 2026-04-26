@@ -87,9 +87,25 @@
         </select>
       </div>
     </div>
-    <div class="checkbox-group">
-      <label><input type="checkbox" id="pluginYolo" checked/> YOLO (Pessoas)</label>
-      <label><input type="checkbox" id="pluginFace"/> Face ID</label>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Visible Main</label>
+        <input type="text" id="visibleMain" placeholder="rtsp://... (opcional)"/>
+      </div>
+      <div class="form-group">
+        <label>Visible Sub</label>
+        <input type="text" id="visibleSub" placeholder="rtsp://... (opcional)"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Thermal Main</label>
+        <input type="text" id="thermalMain" placeholder="rtsp://... (opcional)"/>
+      </div>
+      <div class="form-group">
+        <label>Thermal Sub</label>
+        <input type="text" id="thermalSub" placeholder="rtsp://... (opcional)"/>
+      </div>
     </div>
     <button class="btn btn-primary" onclick="saveCamera()">💾 Cadastrar</button>
   </div>
@@ -209,60 +225,62 @@ function renderList() {
 // Salvar nova câmera
 async function saveCamera() {
   const name = document.getElementById('camName').value.trim();
-  const path = document.getElementById('sourcePath').value.trim();
-  
-  if (!name || !path) {
-    alert('Preencha Nome e URL/Path');
+  const visibleMain = document.getElementById('visibleMain').value.trim();
+  const visibleSub = document.getElementById('visibleSub').value.trim();
+  const thermalMain = document.getElementById('thermalMain').value.trim();
+  const thermalSub = document.getElementById('thermalSub').value.trim();
+
+  if (!name) {
+    alert('Preencha Nome');
     return;
   }
-  
-  const plugins = [];
-  if (document.getElementById('pluginYolo').checked) plugins.push('YOLO');
-  if (document.getElementById('pluginFace').checked) plugins.push('Face ID');
-  
+
+  const fallbackPath = document.getElementById('sourcePath').value.trim();
+  const type = document.getElementById('sourceType').value;
+
   const payload = {
     uuid: generateUUID(),
     name: name,
-    source_type: document.getElementById('sourceType').value,
-    source_url: path,
+    source_type: type,
+    source_url: fallbackPath,
     stream_name: '',
     enabled: true,
     video_wall: false,
-    plugins: plugins,
+    plugins: [],
     node: document.getElementById('clusterNode').value,
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
+    streams: {
+      visible: {
+        main: visibleMain ? { stream_name: `${name.toLowerCase().replace(/\s+/g, '-')}-visible-main`, source_url: visibleMain } : null,
+        sub: visibleSub ? { stream_name: `${name.toLowerCase().replace(/\s+/g, '-')}-visible-sub`, source_url: visibleSub } : null,
+      },
+      thermal: {
+        main: thermalMain ? { stream_name: `${name.toLowerCase().replace(/\s+/g, '-')}-thermal-main`, source_url: thermalMain } : null,
+        sub: thermalSub ? { stream_name: `${name.toLowerCase().replace(/\s+/g, '-')}-thermal-sub`, source_url: thermalSub } : null,
+      }
+    }
   };
-  
+
   try {
     const res = await fetch('/cameras/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    
+
     if (!res.ok) throw new Error();
-    
+
     document.getElementById('camName').value = '';
     document.getElementById('sourcePath').value = '';
+    document.getElementById('visibleMain').value = '';
+    document.getElementById('visibleSub').value = '';
+    document.getElementById('thermalMain').value = '';
+    document.getElementById('thermalSub').value = '';
+
     await loadCameras();
     alert(`✅ Câmera "${name}" cadastrada`);
   } catch (err) {
     alert('❌ Erro ao cadastrar');
-  }
-}
-
-async function importFromGo2rtc() {
-  try {
-    const res = await fetch('/sync/import-go2rtc', { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.detail || 'Falha na importação');
-    }
-
-    await loadCameras();
-    alert(`Importação concluída: ${data.imported_count} importada(s), ${data.skipped_count} já existente(s).`);
-  } catch (err) {
-    alert(`❌ ${err.message}`);
   }
 }
 

@@ -65,3 +65,23 @@ O Gateway Python atua como **orquestrador de controle**, não como motor de IA:
 - Esta etapa não cria/edita streams no go2rtc, apenas importa estado existente.
 - Câmera real/térmica continua para etapa posterior.
 - `CaptureEngine` permanece legado/fallback.
+
+## GAT 2.3 — Câmera lógica com múltiplos streams
+
+### Modelo
+
+- Cada câmera lógica passa a aceitar `streams.visible.main/sub` e `streams.thermal.main/sub`.
+- `thermal` e substreams são opcionais.
+- Compatibilidade retroativa: formato antigo (`stream_name/source_url`) é migrado para `streams.visible.main`.
+
+### Endpoints impactados
+
+- `POST /cameras/` aceita formato antigo e formato novo.
+- `GET /cameras/` e `GET /cameras/{uuid}` retornam estrutura nova com status/URL por stream.
+- `GET /sync/status` passa a considerar cada stream individualmente.
+
+### Escopo
+
+- Sem IA, sem YOLO, sem plugins ativos.
+- Stream térmico é apenas contrato de transporte.
+- `CaptureEngine` permanece legado/fallback.

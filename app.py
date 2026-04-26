@@ -27,6 +27,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+STREAM_SLOTS: List[Tuple[str, str]] = [
+    ("visible", "main"),
+    ("visible", "sub"),
+    ("thermal", "main"),
+    ("thermal", "sub"),
+]
+
 registry_service = RegistryService()
 go2rtc_client = Go2RTCClient()
 active_engines: Dict[str, CaptureEngine] = {}
@@ -43,6 +50,7 @@ class CameraPayload(BaseModel):
     plugins: Optional[List[str]] = None
     node: Optional[str] = "auto"
     created_at: Optional[str] = None
+    streams: Optional[Dict[str, Any]] = None
 
     # Compatibilidade com contrato antigo
     type: Optional[str] = None
@@ -56,22 +64,69 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _normalize_camera(payload: CameraPayload) -> Dict[str, Any]:
-    source_type = payload.source_type or payload.type
-    source_url = payload.source_url or payload.path
-    if not source_type or source_url is None:
-        raise ValueError("Campos obrigatórios ausentes: source_type/source_url")
+def _normalize_stream_node(node: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not isinstance(node, dict):
+        return None
+    return {
+        "stream_name": node.get("stream_name"),
+        "source_url": node.get("source_url", ""),
+    }
 
+
+def _normalize_camera(payload: CameraPayload) -> Dict[str, Any]:
     created_at = payload.created_at or payload.createdAt or _utc_now_iso()
     video_wall = payload.video_wall if payload.video_wall is not None else bool(payload.videoWall)
-    stream_name = payload.stream_name or payload.uuid
+
+    streams_payload = payload.streams if isinstance(payload.streams, dict) else {}
+    visible_payload = streams_payload.get("visible", {}) if isinstance(streams_payload.get("visible", {}), dict) else {}
+    thermal_payload = streams_payload.get("thermal", {}) if isinstance(streams_payload.get("thermal", {}), dict) else {}
+
+    visible_main = _normalize_stream_node(visible_payload.get("main"))
+    visible_sub = _normalize_stream_node(visible_payload.get("sub"))
+    thermal_main = _normalize_stream_node(thermal_payload.get("main"))
+    thermal_sub = _normalize_stream_node(thermal_payload.get("sub"))
+
+    source_type = payload.source_type or payload.type
+    source_url = payload.source_url if payload.source_url is not None else payload.path
+    legacy_stream_name = payload.stream_name or payload.uuid
+
+    if not visible_main and source_type:
+        visible_main = {
+            "stream_name": legacy_stream_name,
+            "source_url": source_url or "",
+        }
+
+    if not any([visible_main, visible_sub, thermal_main, thermal_sub]):
+        raise ValueError("Câmera sem stream definido (visible/thermal main/sub)")
+
+    streams = {
+        "visible": {"main": visible_main, "sub": visible_sub},
+        "thermal": {"main": thermal_main, "sub": thermal_sub},
+    }
+
+    has_visible = bool(visible_main and visible_main.get("stream_name"))
+    has_visible_sub = bool(visible_sub and visible_sub.get("stream_name"))
+    has_thermal = bool(thermal_main and thermal_main.get("stream_name"))
+    has_thermal_sub = bool(thermal_sub and thermal_sub.get("stream_name"))
+
+    stream_count = sum([has_visible, has_visible_sub, has_thermal, has_thermal_sub])
+
+    primary_stream_name = visible_main.get("stream_name") if visible_main else None
+    primary_source_url = visible_main.get("source_url", "") if visible_main else ""
 
     return {
         "uuid": payload.uuid,
         "name": payload.name,
-        "source_type": source_type,
-        "source_url": source_url,
-        "stream_name": stream_name,
+        "has_visible": has_visible,
+        "has_visible_sub": has_visible_sub,
+        "has_thermal": has_thermal,
+        "has_thermal_sub": has_thermal_sub,
+        "stream_count": stream_count,
+        "streams": streams,
+        # Compatibilidade antiga
+        "stream_name": primary_stream_name,
+        "source_url": primary_source_url,
+        "source_type": source_type or "go2rtc",
         "enabled": bool(payload.enabled) if payload.enabled is not None else True,
         "video_wall": bool(video_wall),
         "plugins": payload.plugins or [],
@@ -80,23 +135,49 @@ def _normalize_camera(payload: CameraPayload) -> Dict[str, Any]:
     }
 
 
+def _iter_camera_streams(camera: Dict[str, Any]) -> List[Dict[str, Any]]:
+    streams = camera.get("streams") or {}
+    result: List[Dict[str, Any]] = []
+
+    for modality, profile in STREAM_SLOTS:
+        node = (streams.get(modality) or {}).get(profile)
+        if not isinstance(node, dict):
+            continue
+        stream_name = node.get("stream_name")
+        if not stream_name:
+            continue
+        result.append(
+            {
+                "camera_uuid": camera.get("uuid"),
+                "camera_name": camera.get("name"),
+                "modality": modality,
+                "profile": profile,
+                "stream_name": stream_name,
+                "source_url": node.get("source_url", ""),
+            }
+        )
+    return result
+
+
 def _resolve_sync_sets(
     cameras: List[Dict[str, Any]],
     go2rtc_online: bool,
     streams_index: Dict[str, Dict[str, Any]],
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
+    camera_streams = [item for camera in cameras for item in _iter_camera_streams(camera)]
     if not go2rtc_online:
-        for camera in cameras:
-            logger.info("camera_missing_in_go2rtc uuid=%s stream=%s", camera.get("uuid"), camera.get("stream_name"))
-        return [], cameras, []
+        for item in camera_streams:
+            logger.info("camera_missing_in_go2rtc uuid=%s stream=%s", item.get("camera_uuid"), item.get("stream_name"))
+        return [], camera_streams, []
 
     stream_names = set(streams_index.keys())
-    matched = [camera for camera in cameras if (camera.get("stream_name") in stream_names)]
-    missing_in_go2rtc = [camera for camera in cameras if (camera.get("stream_name") not in stream_names)]
-    for camera in missing_in_go2rtc:
-        logger.info("camera_missing_in_go2rtc uuid=%s stream=%s", camera.get("uuid"), camera.get("stream_name"))
+    matched = [item for item in camera_streams if item["stream_name"] in stream_names]
+    missing_in_go2rtc = [item for item in camera_streams if item["stream_name"] not in stream_names]
 
-    registry_stream_names = {camera.get("stream_name") for camera in cameras}
+    for item in missing_in_go2rtc:
+        logger.info("camera_missing_in_go2rtc uuid=%s stream=%s", item.get("camera_uuid"), item.get("stream_name"))
+
+    registry_stream_names = {item["stream_name"] for item in camera_streams}
     not_imported = [
         {"stream_name": stream_name, **(streams_index.get(stream_name) or {})}
         for stream_name in stream_names
@@ -105,14 +186,23 @@ def _resolve_sync_sets(
     return matched, missing_in_go2rtc, not_imported
 
 
-def _enrich_camera(
-    camera: Dict[str, Any],
+def _enrich_stream_node(
+    node: Optional[Dict[str, Any]],
     go2rtc_online: bool,
-    streams_index: Optional[Dict[str, Dict[str, Any]]] = None,
-) -> Dict[str, Any]:
-    stream_name = camera.get("stream_name") or camera.get("uuid")
-    urls = go2rtc_client.build_stream_urls(stream_name)
-    streams_index = streams_index or {}
+    streams_index: Dict[str, Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    if not isinstance(node, dict):
+        return None
+
+    stream_name = node.get("stream_name")
+    if not stream_name:
+        return {
+            "stream_name": None,
+            "source_url": node.get("source_url", ""),
+            "urls": None,
+            "go2rtc_registered": False,
+            "status_label": "not_published" if go2rtc_online else "go2rtc_offline",
+        }
 
     go2rtc_registered = bool(go2rtc_online and stream_name in streams_index)
     if not go2rtc_online:
@@ -122,14 +212,57 @@ def _enrich_camera(
     else:
         status_label = "not_published"
 
-    payload = dict(camera)
-    payload["urls"] = urls
-    payload["go2rtc_registered"] = go2rtc_registered
-    payload["status_label"] = status_label
-    payload["go2rtc"] = {
-        "registered": go2rtc_registered,
-        "status": status_label,
+    return {
+        "stream_name": stream_name,
+        "source_url": node.get("source_url", ""),
+        "urls": go2rtc_client.build_stream_urls(stream_name),
+        "go2rtc_registered": go2rtc_registered,
+        "status_label": status_label,
     }
+
+
+def _enrich_camera(camera: Dict[str, Any], go2rtc_online: bool, streams_index: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    streams = camera.get("streams") or {}
+    visible = streams.get("visible") or {}
+    thermal = streams.get("thermal") or {}
+
+    visible_main = _enrich_stream_node(visible.get("main"), go2rtc_online, streams_index)
+    visible_sub = _enrich_stream_node(visible.get("sub"), go2rtc_online, streams_index)
+    thermal_main = _enrich_stream_node(thermal.get("main"), go2rtc_online, streams_index)
+    thermal_sub = _enrich_stream_node(thermal.get("sub"), go2rtc_online, streams_index)
+
+    enriched_streams = {
+        "visible": {"main": visible_main, "sub": visible_sub},
+        "thermal": {"main": thermal_main, "sub": thermal_sub},
+    }
+
+    has_visible = bool(visible_main and visible_main.get("stream_name"))
+    has_visible_sub = bool(visible_sub and visible_sub.get("stream_name"))
+    has_thermal = bool(thermal_main and thermal_main.get("stream_name"))
+    has_thermal_sub = bool(thermal_sub and thermal_sub.get("stream_name"))
+    stream_count = sum([has_visible, has_visible_sub, has_thermal, has_thermal_sub])
+
+    primary = visible_main or visible_sub or thermal_main or thermal_sub
+
+    payload = dict(camera)
+    payload["streams"] = enriched_streams
+    payload["has_visible"] = has_visible
+    payload["has_visible_sub"] = has_visible_sub
+    payload["has_thermal"] = has_thermal
+    payload["has_thermal_sub"] = has_thermal_sub
+    payload["stream_count"] = stream_count
+
+    # compatibilidade legado
+    payload["stream_name"] = (primary or {}).get("stream_name")
+    payload["source_url"] = (primary or {}).get("source_url", "")
+    payload["urls"] = (primary or {}).get("urls")
+    payload["go2rtc_registered"] = bool((primary or {}).get("go2rtc_registered", False))
+    payload["status_label"] = (primary or {}).get("status_label", "go2rtc_offline" if not go2rtc_online else "not_published")
+    payload["go2rtc"] = {
+        "registered": payload["go2rtc_registered"],
+        "status": payload["status_label"],
+    }
+
     return payload
 
 
@@ -161,13 +294,11 @@ def sync_status() -> Dict[str, Any]:
     go2rtc_online = bool(snapshot["online"])
     streams_index = snapshot["streams"]
 
-    if go2rtc_online:
-        go2rtc_streams = [
-            {"stream_name": stream_name, **(details or {})}
-            for stream_name, details in streams_index.items()
-        ]
-    else:
-        go2rtc_streams = []
+    go2rtc_streams = (
+        [{"stream_name": stream_name, **(details or {})} for stream_name, details in streams_index.items()]
+        if go2rtc_online
+        else []
+    )
 
     matched, missing_in_go2rtc, not_imported = _resolve_sync_sets(
         registered_cameras,
@@ -193,17 +324,17 @@ def sync_import_go2rtc() -> Dict[str, Any]:
         raise HTTPException(status_code=503, detail="go2rtc offline: não foi possível importar streams")
 
     streams_index: Dict[str, Dict[str, Any]] = snapshot["streams"]
-    existing_by_stream = {
-        camera.get("stream_name"): camera
+    existing_stream_names = {
+        item["stream_name"]
         for camera in registry_service.list_cameras()
-        if camera.get("stream_name")
+        for item in _iter_camera_streams(camera)
     }
 
     imported: List[Dict[str, Any]] = []
     skipped: List[Dict[str, Any]] = []
 
     for stream_name, details in streams_index.items():
-        if stream_name in existing_by_stream:
+        if stream_name in existing_stream_names:
             logger.info("go2rtc_stream_skipped_existing stream=%s", stream_name)
             skipped.append({"stream_name": stream_name, "reason": "already_in_registry"})
             continue
@@ -216,12 +347,27 @@ def sync_import_go2rtc() -> Dict[str, Any]:
         camera = {
             "uuid": str(uuid.uuid4()),
             "name": stream_name,
-            "source_type": "go2rtc",
-            "source_url": producer_url,
+            "has_visible": True,
+            "has_visible_sub": False,
+            "has_thermal": False,
+            "has_thermal_sub": False,
+            "stream_count": 1,
+            "streams": {
+                "visible": {
+                    "main": {
+                        "stream_name": stream_name,
+                        "source_url": producer_url,
+                    },
+                    "sub": None,
+                },
+                "thermal": {"main": None, "sub": None},
+            },
             "stream_name": stream_name,
+            "source_url": producer_url,
+            "source_type": "go2rtc",
             "enabled": True,
-            "video_wall": True,
-            "plugins": ["YOLO"],
+            "video_wall": False,
+            "plugins": [],
             "node": "auto",
             "created_at": _utc_now_iso(),
         }
@@ -273,11 +419,7 @@ def add_camera(payload: CameraPayload) -> Dict[str, Any]:
     return {
         "status": "success",
         "camera": enriched,
-        "observation": (
-            "Cadastro persistido. Stream ainda não encontrado no go2rtc."
-            if not enriched["go2rtc_registered"]
-            else "Cadastro persistido e stream visível no go2rtc."
-        ),
+        "observation": "Cadastro persistido. Verifique status por stream em camera.streams.*",
     }
 
 
@@ -300,10 +442,13 @@ def frame_generator(uuid: str) -> Generator[bytes, None, None]:
         if not camera:
             return
 
+        source_url = camera.get("source_url", "")
+        source_type = camera.get("source_type", "")
+
         engine = CaptureEngine(
             camera_uuid=uuid,
-            source_type=camera.get("source_type", ""),
-            source_path=camera.get("source_url", ""),
+            source_type=source_type,
+            source_path=source_url,
         )
         active_engines[uuid] = engine
 
