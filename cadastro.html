@@ -102,45 +102,6 @@
         <div class="form-group"><label><input type="checkbox" id="go2rtcIsThermal"/> Usar como térmico ao salvar</label></div>
       </div>
       <div id="go2rtcStreamsList" class="discovery-table-wrap"><div class="loading">Nenhum stream carregado.</div></div>
-
-      <div class="card-title" style="font-size:14px; margin-top:16px">B) Descobrir câmeras ONVIF na rede</div>
-      <div class="muted" style="margin-bottom:8px"><strong>Recomendado:</strong> busca direcionada por IP.</div>
-      <div class="form-row">
-        <div class="form-group"><label>IP ONVIF</label><input id="onvifIp" placeholder="192.168.1.50"/></div>
-        <div class="form-group"><label>Porta ONVIF</label><input id="onvifPort" type="number" value="80"/></div>
-        <div class="form-group"><label>Usuário</label><input id="onvifUser" placeholder="admin"/></div>
-        <div class="form-group"><label>Senha</label><input id="onvifPass" type="password" placeholder="••••••"/></div>
-      </div>
-      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:6px">
-        <button class="btn btn-sm" onclick="detectLocalNetwork()">Detectar rede local</button>
-        <button class="btn btn-sm btn-primary" onclick="fetchOnvifProfilesByCamera()">Buscar câmera</button>
-      </div>
-      <div class="muted" id="networkHintInfo" style="margin-bottom:6px"></div>
-      <div class="muted" style="margin-bottom:8px">Varredura geral é opcional/experimental.</div>
-      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px">
-        <button class="btn btn-sm" onclick="fetchOnvifDevices()">Buscar rede inteira (lento)</button>
-        <span class="muted">Pode levar até 30s e não funcionar em todas as redes.</span>
-      </div>
-      <div class="card-title" style="font-size:14px; margin-top:16px">C) Varredura de rede ONVIF</div>
-      <div class="muted" style="margin-bottom:8px">0.0.0.0 significa todas as interfaces. O sistema detecta redes locais reais e varre a faixa escolhida.</div>
-      <div class="form-row">
-        <div class="form-group"><label>Rede local detectada</label><select id="scanNetworkSelect"></select></div>
-        <div class="form-group"><label>base_ip</label><input id="scanBaseIp" placeholder="192.168.1."/></div>
-        <div class="form-group"><label>start</label><input id="scanStart" type="number" value="1" min="1" max="254"/></div>
-        <div class="form-group"><label>end</label><input id="scanEnd" type="number" value="254" min="1" max="254"/></div>
-      </div>
-      <div class="form-row">
-        <div class="form-group"><label>porta ONVIF</label><input id="scanPort" type="number" value="80"/></div>
-        <div class="form-group"><label>usuário</label><input id="scanUser" placeholder="admin"/></div>
-        <div class="form-group"><label>senha</label><input id="scanPassword" type="password" placeholder="••••••"/></div>
-      </div>
-      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px">
-        <button class="btn btn-sm" onclick="detectLocalNetworks()">Detectar redes locais</button>
-        <button class="btn btn-sm" onclick="scanOnvifNetwork()">Varrer rede selecionada</button>
-      </div>
-      <span id="scanFeedback" class="muted"></span>
-      <span id="onvifFeedback" class="muted"></span>
-      <div id="onvifDevicesList" class="discovery-table-wrap"><div class="loading">Nenhum dispositivo ONVIF carregado.</div></div>
     </div>
 
     <div id="fileFields" class="hidden">
@@ -184,34 +145,12 @@
 <script>
 let cameras = [];
 let go2rtcStreams = [];
-let onvifDevices = [];
-let localNetworks = [];
 
 const isFakePath = (value) => (value || '').toLowerCase().startsWith('c:\\fakepath');
 
 function generateUUID(){return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16);});}
 function safeSlug(t){return (t||'').toLowerCase().trim().replace(/\s+/g,'-').replace(/[^a-z0-9-_]/g,'');}
 function makeStream(n,u){const sn=(n||'').trim(),su=(u||'').trim(); if(!sn&&!su) return null; return {stream_name: sn||null, source_url: su||''};}
-
-function maskSensitiveUrl(url){
-  if(!url) return '';
-  try{
-    const parsed=new URL(url);
-    if(parsed.password){
-      parsed.password='***';
-      return parsed.toString();
-    }
-    return url;
-  }catch{
-    return String(url).replace(/(:\/\/[^:@\/]+:)([^@\/]+)@/,'$1***@');
-  }
-}
-
-function extractHost(url){
-  if(!url) return '-';
-  try{return new URL(url).hostname||'-';}catch{return '-';}
-}
-
 
 function clearFieldErrors(){
   document.querySelectorAll('.field-error').forEach(el=>el.remove());
@@ -279,7 +218,7 @@ function testAssistedRtsp(){
 
 function modeHelpText(mode){
   if(mode==='camera_ip') return 'Modo assistido: informe IP, usuário e senha. O RTSP será montado automaticamente.';
-  if(mode==='go2rtc') return 'Use áreas separadas: streams já cadastrados e descoberta ONVIF na rede.';
+  if(mode==='go2rtc') return 'Selecione streams já cadastrados no go2rtc para usar no cadastro.';
   if(mode==='file') return 'Arquivo de vídeo: use upload ou caminho existente no servidor.';
   return 'Avançado: informe RTSP completo manualmente.';
 }
@@ -397,186 +336,6 @@ async function fetchGo2rtcStreams(){
     renderGo2rtcStreamsList();
     f.textContent=`Erro: ${err.message}`;
   }
-}
-
-function renderOnvifDevicesList(){
-  const box=document.getElementById('onvifDevicesList');
-  if(!onvifDevices.length){
-    box.innerHTML='<div class="loading">Nenhum dispositivo ONVIF encontrado.</div>';
-    return;
-  }
-
-  box.innerHTML=`<table class="discovery-table"><thead><tr><th>nome</th><th>url</th><th>host/ip</th><th>ações</th></tr></thead><tbody>${onvifDevices.map((d,idx)=>{
-    const usable=d.rtsp_url||d.url||'';
-    const host=d.host||extractHost(usable);
-    return `<tr><td>${escapeHtml((d.name||('onvif_'+(idx+1))))}</td><td>${escapeHtml(maskSensitiveUrl(d.url||''))}</td><td>${escapeHtml(host||'-')}</td><td><button class="btn btn-sm" onclick="useOnvifDevice(${idx},'visible')">Usar como visível</button> <button class="btn btn-sm" onclick="useOnvifDevice(${idx},'thermal')">Usar como térmico</button></td></tr>`;
-  }).join('')}</tbody></table>`;
-}
-
-function renderLocalNetworks(){
-  const select=document.getElementById('scanNetworkSelect');
-  if(!select) return;
-  if(!localNetworks.length){
-    select.innerHTML='<option value="">(nenhuma rede detectada)</option>';
-    return;
-  }
-  select.innerHTML=localNetworks.map((n,idx)=>`<option value="${idx}">${escapeHtml(n.local_ip)} (${escapeHtml(n.cidr)})</option>`).join('');
-  applySelectedNetwork();
-}
-
-function applySelectedNetwork(){
-  const idx=Number(document.getElementById('scanNetworkSelect').value||0);
-  const n=localNetworks[idx];
-  if(!n) return;
-  document.getElementById('scanBaseIp').value=n.base_ip||'';
-  document.getElementById('scanStart').value=n.suggested_start||1;
-  document.getElementById('scanEnd').value=n.suggested_end||254;
-}
-
-async function detectLocalNetworks(){
-  const f=document.getElementById('scanFeedback');
-  f.textContent='⏳ Detectando redes locais...';
-  try{
-    const res=await fetch('/network/local-networks');
-    if(!res.ok) throw new Error('Falha ao detectar redes locais');
-    const data=await res.json();
-    localNetworks=Array.isArray(data.networks)?data.networks:[];
-    renderLocalNetworks();
-    f.textContent=`Redes detectadas: ${localNetworks.length}`;
-  }catch(err){
-    localNetworks=[];
-    renderLocalNetworks();
-    f.textContent=`Erro ao detectar redes: ${err.message}`;
-  }
-}
-
-async function scanOnvifNetwork(){
-  const baseIp=document.getElementById('scanBaseIp').value.trim();
-  const start=document.getElementById('scanStart').value.trim()||'1';
-  const end=document.getElementById('scanEnd').value.trim()||'254';
-  const port=document.getElementById('scanPort').value.trim()||'80';
-  const user=document.getElementById('scanUser').value.trim();
-  const password=document.getElementById('scanPassword').value.trim();
-  const f=document.getElementById('scanFeedback');
-
-  if(!baseIp || !user || !password){
-    f.textContent='Preencha base_ip, usuário e senha para varredura de rede.';
-    return;
-  }
-
-  const q=new URLSearchParams({base_ip:baseIp,start,end,port,user,password,timeout_per_host:'3',max_workers:'16'});
-  f.textContent='⏳ Varredura ONVIF em andamento...';
-  try{
-    const res=await fetch(`/go2rtc/discovery/onvif/scan?${q.toString()}`);
-    if(!res.ok) throw new Error('Falha ao varrer rede ONVIF');
-    const data=await res.json();
-    onvifDevices=(data.devices||[]).map(d=>({name:d.name,url:(d.streams&&d.streams[0]&&d.streams[0].url)||'',rtsp_url:(d.streams&&d.streams[0]&&d.streams[0].url)||'',host:d.ip,raw:d.raw||{}}));
-    renderOnvifDevicesList();
-    f.textContent=`Scan concluído: encontrados=${data.count||0}, timeouts=${data.timeout_count||0}, falhas=${data.failed_count||0}`;
-  }catch(err){
-    f.textContent=`Erro no scan ONVIF: ${err.message}`;
-  }
-}
-
-async function detectLocalNetwork(){
-  const info=document.getElementById('networkHintInfo');
-  const f=document.getElementById('onvifFeedback');
-  f.textContent='⏳ Detectando rede local...';
-  try{
-    const res=await fetch('/network/local-base');
-    if(!res.ok) throw new Error('Falha ao detectar rede local');
-    const data=await res.json();
-
-    const ipInput=document.getElementById('onvifIp');
-    if(ipInput && !ipInput.value.trim()) ipInput.value=data.base_ip;
-
-    const portInput=document.getElementById('onvifPort');
-    if(portInput && !portInput.value.trim()) portInput.value=String((data.suggested_onvif_ports||[80])[0]||80);
-
-    info.textContent=`Rede local: ${data.local_ip} | Base sugerida: ${data.base_ip} | Portas ONVIF: ${(data.suggested_onvif_ports||[]).join(', ')}`;
-    f.textContent='Use a base sugerida para busca direcionada por IP.';
-  }catch(err){
-    info.textContent='Não foi possível detectar a rede local automaticamente.';
-    f.textContent=`Erro de detecção de rede: ${err.message}`;
-  }
-}
-
-async function fetchOnvifDevices(){
-  const f=document.getElementById('onvifFeedback');
-  f.textContent='⏳ Consultando ONVIF (varredura geral)...';
-  try{
-    const res=await fetch('/go2rtc/discovery/onvif');
-    if(!res.ok) throw new Error('Falha ao consultar ONVIF no go2rtc');
-    const data=await res.json();
-    if(data.success===false){ onvifDevices=[]; renderOnvifDevicesList(); f.textContent=data.message||'Busca ONVIF indisponível.'; return; }
-    onvifDevices=Array.isArray(data.devices)?data.devices:[];
-    renderOnvifDevicesList();
-    f.textContent=`Dispositivos ONVIF encontrados: ${onvifDevices.length}`;
-  }catch(err){
-    onvifDevices=[];
-    renderOnvifDevicesList();
-    f.textContent=`Erro ONVIF: ${err.message}`;
-  }
-}
-
-async function fetchOnvifProfilesByCamera(){
-  const ip=document.getElementById('onvifIp').value.trim();
-  const port=(document.getElementById('onvifPort').value||'80').trim();
-  const user=document.getElementById('onvifUser').value.trim();
-  const pass=document.getElementById('onvifPass').value.trim();
-  const f=document.getElementById('onvifFeedback');
-
-  if(!ip || !user || !pass){
-    f.textContent='Preencha IP, usuário e senha para busca direcionada ONVIF.';
-    return;
-  }
-
-  const src=`onvif://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${ip}:${port}`;
-  f.textContent='⏳ Consultando câmera ONVIF por IP...';
-  try{
-    const res=await fetch(`/go2rtc/discovery/onvif?src=${encodeURIComponent(src)}`);
-    if(!res.ok) throw new Error('Falha ao consultar perfis ONVIF da câmera');
-    const data=await res.json();
-    if(data.success===false){ onvifDevices=[]; renderOnvifDevicesList(); f.textContent=data.message||'Não foi possível descobrir a câmera ONVIF.'; return; }
-    onvifDevices=Array.isArray(data.devices)?data.devices:[];
-    renderOnvifDevicesList();
-    f.textContent=`Perfis/streams ONVIF encontrados: ${onvifDevices.length}`;
-  }catch(err){
-    onvifDevices=[];
-    renderOnvifDevicesList();
-    f.textContent=`Erro ONVIF: ${err.message}`;
-  }
-}
-
-function useOnvifDevice(index, modality){
-  const item=onvifDevices[index];
-  if(!item) return;
-
-  const usableUrl=item.rtsp_url||item.url||'';
-  const streamName=safeSlug(item.name||'onvif')||`onvif-${index+1}`;
-
-  if(!document.getElementById('camName').value.trim()){
-    document.getElementById('camName').value=item.name||`ONVIF ${index+1}`;
-  }
-
-  if(usableUrl.startsWith('rtsp://')){
-    document.getElementById('registrationMode').value='advanced';
-    onRegistrationModeChange();
-    document.getElementById('advancedRtspUrl').value=usableUrl;
-    document.getElementById('advancedStreamName').value=streamName;
-    document.getElementById('advancedIsThermal').checked=(modality==='thermal');
-    setFormFeedback('URL RTSP ONVIF aplicada no modo avançado.','success');
-    return;
-  }
-
-  document.getElementById('registrationMode').value='go2rtc';
-  onRegistrationModeChange();
-  document.getElementById('go2rtcIsThermal').checked=(modality==='thermal');
-  const found=go2rtcStreams.find(s=>(s.stream_name||s.name)===streamName);
-  if(found){
-    document.getElementById('go2rtcStreamSelect').value=streamName;
-  }
-  setFormFeedback('Dispositivo ONVIF aplicado. Se necessário, ajuste stream no modo go2rtc.','success');
 }
 
 async function importFromGo2rtc(){
@@ -721,8 +480,6 @@ function escapeHtml(t){const d=document.createElement('div'); d.textContent=t||'
 onRegistrationModeChange();
 refreshStatus();
 fetchGo2rtcStreams();
-detectLocalNetworks();
-const scanSelect=document.getElementById('scanNetworkSelect'); if(scanSelect) scanSelect.addEventListener('change', applySelectedNetwork);
 setInterval(checkMasterStatus,30000);
 setInterval(checkGo2rtcStatus,30000);
 </script>
