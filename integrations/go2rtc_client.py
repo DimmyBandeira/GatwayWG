@@ -77,12 +77,12 @@ class Go2RTCClient:
             return {"online": False, "streams": {}}
         return {"online": True, "streams": streams}
 
-    def discover_onvif(self, src: str | None = None) -> Dict[str, Any]:
+    def discover_onvif(self, src: str | None = None, timeout_seconds: float | None = None) -> Dict[str, Any]:
         params: Dict[str, str] = {}
         if src:
             params["src"] = src
 
-        timeout_seconds = 10 if src else 20
+        timeout_seconds = timeout_seconds if timeout_seconds is not None else (10 if src else 20)
 
         try:
             response = requests.get(f"{self.base_url}/api/onvif", params=params, timeout=timeout_seconds)

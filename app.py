@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any, Dict, Generator, List, Optional, Tuple
 
@@ -15,7 +16,7 @@ from integrations.go2rtc_client import Go2RTCClient
 from services.camera_normalizer import normalize_stream_node, payload_has_fakepath, sanitize_plugins
 from services.capture_engine import CaptureEngine
 from services.go2rtc_discovery_service import Go2RTCDiscoveryService
-from services.network_hint_service import get_network_hint
+from services.network_hint_service import get_local_networks, get_network_hint
 from services.registry_service import RegistryService
 from services.upload_service import save_video_upload
 
@@ -288,6 +289,11 @@ def network_local_base() -> Dict[str, Any]:
     }
 
 
+@app.get("/network/local-networks")
+def network_local_networks() -> Dict[str, Any]:
+    return {"networks": get_local_networks()}
+
+
 @app.post("/upload/video")
 async def upload_video(file: UploadFile = File(...)) -> Dict[str, str]:
     try:
@@ -337,6 +343,76 @@ def go2rtc_discovery_onvif(src: Optional[str] = Query(default=None)) -> Dict[str
         }
 
     return go2rtc_discovery_service.discover_onvif(src=src)
+
+
+@app.get("/go2rtc/discovery/onvif/scan")
+def go2rtc_discovery_onvif_scan(
+    base_ip: str,
+    start: int = Query(default=1, ge=1, le=254),
+    end: int = Query(default=254, ge=1, le=254),
+    port: int = Query(default=80, ge=1, le=65535),
+    user: str = Query(..., min_length=1),
+    password: str = Query(..., min_length=1),
+    timeout_per_host: float = Query(default=3.0, ge=0.5, le=10.0),
+    max_workers: int = Query(default=16, ge=1, le=64),
+) -> Dict[str, Any]:
+    if not base_ip.endswith("."):
+        raise HTTPException(status_code=400, detail="base_ip inválido. Exemplo: 192.168.1.")
+
+    if end < start:
+        raise HTTPException(status_code=400, detail="Faixa inválida: end deve ser >= start")
+
+    def scan_one(host: int) -> Dict[str, Any]:
+        ip = f"{base_ip}{host}"
+        src = f"onvif://{user}:{password}@{ip}:{port}"
+        result = go2rtc_client.discover_onvif(src=src, timeout_seconds=timeout_per_host)
+        return {"ip": ip, "result": result}
+
+    devices: List[Dict[str, Any]] = []
+    timeout_count = 0
+    failed_count = 0
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(scan_one, host) for host in range(start, end + 1)]
+        for fut in as_completed(futures):
+            item = fut.result()
+            ip = item["ip"]
+            result = item["result"]
+
+            if not result.get("success"):
+                if result.get("timeout"):
+                    timeout_count += 1
+                else:
+                    failed_count += 1
+                continue
+
+            streams = result.get("streams") if isinstance(result.get("streams"), list) else []
+            if not streams:
+                failed_count += 1
+                continue
+
+            first = streams[0] if isinstance(streams[0], dict) else {}
+            devices.append(
+                {
+                    "ip": ip,
+                    "port": port,
+                    "name": first.get("name") or first.get("stream_name") or ip,
+                    "streams": streams,
+                    "raw": result.get("raw", {}),
+                }
+            )
+
+    return {
+        "source": "go2rtc_onvif_scan",
+        "base_ip": base_ip,
+        "start": start,
+        "end": end,
+        "port": port,
+        "count": len(devices),
+        "devices": devices,
+        "failed_count": failed_count,
+        "timeout_count": timeout_count,
+    }
 
 
 @app.get("/sync/status")

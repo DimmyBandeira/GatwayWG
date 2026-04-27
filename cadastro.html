@@ -121,6 +121,24 @@
         <button class="btn btn-sm" onclick="fetchOnvifDevices()">Buscar rede inteira (lento)</button>
         <span class="muted">Pode levar até 30s e não funcionar em todas as redes.</span>
       </div>
+      <div class="card-title" style="font-size:14px; margin-top:16px">C) Varredura de rede ONVIF</div>
+      <div class="muted" style="margin-bottom:8px">0.0.0.0 significa todas as interfaces. O sistema detecta redes locais reais e varre a faixa escolhida.</div>
+      <div class="form-row">
+        <div class="form-group"><label>Rede local detectada</label><select id="scanNetworkSelect"></select></div>
+        <div class="form-group"><label>base_ip</label><input id="scanBaseIp" placeholder="192.168.1."/></div>
+        <div class="form-group"><label>start</label><input id="scanStart" type="number" value="1" min="1" max="254"/></div>
+        <div class="form-group"><label>end</label><input id="scanEnd" type="number" value="254" min="1" max="254"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>porta ONVIF</label><input id="scanPort" type="number" value="80"/></div>
+        <div class="form-group"><label>usuário</label><input id="scanUser" placeholder="admin"/></div>
+        <div class="form-group"><label>senha</label><input id="scanPassword" type="password" placeholder="••••••"/></div>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px">
+        <button class="btn btn-sm" onclick="detectLocalNetworks()">Detectar redes locais</button>
+        <button class="btn btn-sm" onclick="scanOnvifNetwork()">Varrer rede selecionada</button>
+      </div>
+      <span id="scanFeedback" class="muted"></span>
       <span id="onvifFeedback" class="muted"></span>
       <div id="onvifDevicesList" class="discovery-table-wrap"><div class="loading">Nenhum dispositivo ONVIF carregado.</div></div>
     </div>
@@ -167,6 +185,7 @@
 let cameras = [];
 let go2rtcStreams = [];
 let onvifDevices = [];
+let localNetworks = [];
 
 const isFakePath = (value) => (value || '').toLowerCase().startsWith('c:\\fakepath');
 
@@ -392,6 +411,71 @@ function renderOnvifDevicesList(){
     const host=d.host||extractHost(usable);
     return `<tr><td>${escapeHtml((d.name||('onvif_'+(idx+1))))}</td><td>${escapeHtml(maskSensitiveUrl(d.url||''))}</td><td>${escapeHtml(host||'-')}</td><td><button class="btn btn-sm" onclick="useOnvifDevice(${idx},'visible')">Usar como visível</button> <button class="btn btn-sm" onclick="useOnvifDevice(${idx},'thermal')">Usar como térmico</button></td></tr>`;
   }).join('')}</tbody></table>`;
+}
+
+function renderLocalNetworks(){
+  const select=document.getElementById('scanNetworkSelect');
+  if(!select) return;
+  if(!localNetworks.length){
+    select.innerHTML='<option value="">(nenhuma rede detectada)</option>';
+    return;
+  }
+  select.innerHTML=localNetworks.map((n,idx)=>`<option value="${idx}">${escapeHtml(n.local_ip)} (${escapeHtml(n.cidr)})</option>`).join('');
+  applySelectedNetwork();
+}
+
+function applySelectedNetwork(){
+  const idx=Number(document.getElementById('scanNetworkSelect').value||0);
+  const n=localNetworks[idx];
+  if(!n) return;
+  document.getElementById('scanBaseIp').value=n.base_ip||'';
+  document.getElementById('scanStart').value=n.suggested_start||1;
+  document.getElementById('scanEnd').value=n.suggested_end||254;
+}
+
+async function detectLocalNetworks(){
+  const f=document.getElementById('scanFeedback');
+  f.textContent='⏳ Detectando redes locais...';
+  try{
+    const res=await fetch('/network/local-networks');
+    if(!res.ok) throw new Error('Falha ao detectar redes locais');
+    const data=await res.json();
+    localNetworks=Array.isArray(data.networks)?data.networks:[];
+    renderLocalNetworks();
+    f.textContent=`Redes detectadas: ${localNetworks.length}`;
+  }catch(err){
+    localNetworks=[];
+    renderLocalNetworks();
+    f.textContent=`Erro ao detectar redes: ${err.message}`;
+  }
+}
+
+async function scanOnvifNetwork(){
+  const baseIp=document.getElementById('scanBaseIp').value.trim();
+  const start=document.getElementById('scanStart').value.trim()||'1';
+  const end=document.getElementById('scanEnd').value.trim()||'254';
+  const port=document.getElementById('scanPort').value.trim()||'80';
+  const user=document.getElementById('scanUser').value.trim();
+  const password=document.getElementById('scanPassword').value.trim();
+  const f=document.getElementById('scanFeedback');
+
+  if(!baseIp || !user || !password){
+    f.textContent='Preencha base_ip, usuário e senha para varredura de rede.';
+    return;
+  }
+
+  const q=new URLSearchParams({base_ip:baseIp,start,end,port,user,password,timeout_per_host:'3',max_workers:'16'});
+  f.textContent='⏳ Varredura ONVIF em andamento...';
+  try{
+    const res=await fetch(`/go2rtc/discovery/onvif/scan?${q.toString()}`);
+    if(!res.ok) throw new Error('Falha ao varrer rede ONVIF');
+    const data=await res.json();
+    onvifDevices=(data.devices||[]).map(d=>({name:d.name,url:(d.streams&&d.streams[0]&&d.streams[0].url)||'',rtsp_url:(d.streams&&d.streams[0]&&d.streams[0].url)||'',host:d.ip,raw:d.raw||{}}));
+    renderOnvifDevicesList();
+    f.textContent=`Scan concluído: encontrados=${data.count||0}, timeouts=${data.timeout_count||0}, falhas=${data.failed_count||0}`;
+  }catch(err){
+    f.textContent=`Erro no scan ONVIF: ${err.message}`;
+  }
 }
 
 async function detectLocalNetwork(){
@@ -637,6 +721,8 @@ function escapeHtml(t){const d=document.createElement('div'); d.textContent=t||'
 onRegistrationModeChange();
 refreshStatus();
 fetchGo2rtcStreams();
+detectLocalNetworks();
+const scanSelect=document.getElementById('scanNetworkSelect'); if(scanSelect) scanSelect.addEventListener('change', applySelectedNetwork);
 setInterval(checkMasterStatus,30000);
 setInterval(checkGo2rtcStatus,30000);
 </script>

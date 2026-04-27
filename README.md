@@ -100,3 +100,11 @@ GatwayWG/
 
 - `GET /network/local-base` sugere IP/base local e portas ONVIF/RTSP comuns para facilitar busca direcionada.
 - Não realiza scan de rede pesada e não adiciona dependência Python ONVIF neste GAT.
+
+
+### ONVIF scan por sub-rede local
+
+- `GET /network/local-networks` lista redes locais privadas detectadas.
+- `GET /go2rtc/discovery/onvif/scan` faz varredura controlada por faixa (ex.: `192.168.1.100-110`) usando go2rtc `src=onvif://...`.
+- `0.0.0.0` não é alvo de câmera; é apenas wildcard de interface local.
+- Limites: pode demorar e depende de ONVIF habilitado, firewall e credencial informada pelo operador.

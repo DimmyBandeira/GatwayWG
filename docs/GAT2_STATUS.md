@@ -159,3 +159,14 @@ O Gateway Python atua como **orquestrador de controle**, não como motor de IA:
 - Endpoint adicionado: `GET /network/local-base` para sugerir `base_ip` e portas comuns ONVIF/RTSP, sem scan pesado.
 - Discovery principal continua via go2rtc `GET /api/onvif` com busca direcionada por `src`.
 - Scan por faixa e fallback com biblioteca Python ONVIF ficam para etapa futura.
+
+
+## GAT 2.4.4 — ONVIF scan controlado por sub-rede local
+
+- `GET /network/local-networks` detecta sub-redes locais privadas (sem usar `0.0.0.0` como alvo).
+- `GET /go2rtc/discovery/onvif/scan` varre faixa de IP controlada, host a host, chamando go2rtc `GET /api/onvif?src=...`.
+- Diferença de fluxos:
+  - ONVIF por IP (`src`) = recomendado;
+  - ONVIF scan de rede = avançado/lento, depende de firewall/ONVIF ativo/credencial informada.
+- `0.0.0.0` representa todas as interfaces locais, não um IP de câmera.
+- Senha não é retornada no JSON do scan e não deve aparecer em logs.
