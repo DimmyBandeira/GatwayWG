@@ -108,3 +108,12 @@ O Gateway Python atua como **orquestrador de controle**, não como motor de IA:
 
 - GAT 2.4 iniciou modularização pontual com `services/camera_normalizer.py` para sanitização/validação de payload (incluindo bloqueio de `C:\\fakepath`).
 - Sem refactor amplo de rotas nesta etapa para manter diff controlado.
+
+## GAT 2.4.1 — Upload mínimo para source_type=file
+
+- Endpoint adicionado: `POST /upload/video` (multipart/form-data, campo `file`).
+- Arquivos são salvos em `data/media/` com nome sanitizado e sufixo único.
+- Extensões permitidas: `.mp4`, `.avi`, `.mkv`.
+- Limite simples de tamanho: `200MB`.
+- `cadastro.html` envia arquivo automaticamente ao selecionar e usa `file_path` retornado como `source_url`.
+- `C:\\fakepath` continua bloqueado no frontend e backend.

@@ -94,12 +94,12 @@
         <div class="form-group"><label>stream_name</label><input id="fileStreamName" placeholder="camera-file-main"/></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Selecionar arquivo (apenas visual)</label><input type="file" id="fileInput" onchange="previewSelectedFile()"/></div>
+        <div class="form-group"><label>Selecionar arquivo (apenas visual)</label><input type="file" id="fileInput" onchange="uploadSelectedFile()"/></div>
         <div class="form-group"><label>Arquivo selecionado</label><input id="filePickedName" readonly/></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label><input type="checkbox" id="fileIsThermal"/> Arquivo é térmico?</label></div>
-        <div class="form-group"><span class="muted">Para arquivo local, informe um caminho acessível pelo servidor Gateway. O navegador não fornece o caminho real do arquivo.</span></div>
+        <div class="form-group"><span class="muted">Para arquivo local, informe um caminho acessível pelo servidor Gateway. O navegador não fornece o caminho real do arquivo.</span><br/><span id="fileUploadStatus" class="muted"></span></div>
       </div>
     </div>
 
@@ -139,10 +139,25 @@ function onSourceTypeChange(){
   document.getElementById('go2rtcFields').classList.toggle('hidden', t!=='go2rtc');
 }
 
-function previewSelectedFile(){
+async function uploadSelectedFile(){
   const fileInput=document.getElementById('fileInput');
-  const name=(fileInput.files&&fileInput.files[0])?fileInput.files[0].name:'';
-  document.getElementById('filePickedName').value=name;
+  const status=document.getElementById('fileUploadStatus');
+  const file=(fileInput.files&&fileInput.files[0])?fileInput.files[0]:null;
+  document.getElementById('filePickedName').value=file?file.name:'';
+  if(!file){status.textContent='';return;}
+
+  const formData=new FormData();
+  formData.append('file', file);
+  status.textContent='Enviando arquivo...';
+  try{
+    const res=await fetch('/upload/video',{method:'POST', body: formData});
+    const data=await res.json();
+    if(!res.ok) throw new Error(data.detail||'Falha no upload');
+    document.getElementById('fileServerPath').value=data.file_path;
+    status.textContent='Upload realizado com sucesso.';
+  }catch(err){
+    status.textContent=`Erro no upload: ${err.message}`;
+  }
 }
 
 function renderGo2rtcStreamsList(){

@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import cv2
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
@@ -15,6 +15,7 @@ from integrations.go2rtc_client import Go2RTCClient
 from services.camera_normalizer import normalize_stream_node, payload_has_fakepath, sanitize_plugins
 from services.capture_engine import CaptureEngine
 from services.registry_service import RegistryService
+from services.upload_service import save_video_upload
 
 logger = logging.getLogger("GatewayApp")
 
@@ -272,6 +273,21 @@ def serve_ui() -> FileResponse:
 def health_check() -> Dict[str, str]:
     return {"status": "online", "version": "2.0.0"}
 
+
+
+
+@app.post("/upload/video")
+async def upload_video(file: UploadFile = File(...)) -> Dict[str, str]:
+    try:
+        file_path = await save_video_upload(file)
+    except ValueError as exc:
+        msg = str(exc)
+        status = 413 if "200MB" in msg else 400
+        raise HTTPException(status_code=status, detail=msg) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Falha ao salvar upload: {exc}") from exc
+
+    return {"file_path": file_path}
 
 @app.get("/go2rtc/health")
 def go2rtc_health() -> Dict[str, Any]:
