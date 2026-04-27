@@ -314,6 +314,18 @@ def go2rtc_discovery_streams() -> Dict[str, Any]:
 
 @app.get("/go2rtc/discovery/onvif")
 def go2rtc_discovery_onvif(src: Optional[str] = Query(default=None)) -> Dict[str, Any]:
+    if not src:
+        return {
+            "online": True,
+            "success": False,
+            "timeout": False,
+            "source": "go2rtc_onvif",
+            "count": 0,
+            "devices": [],
+            "message": "Busca ONVIF geral é lenta/instável. Use busca direcionada por IP.",
+            "hint": "onvif://user:pass@ip:porta",
+        }
+
     return go2rtc_discovery_service.discover_onvif(src=src)
 
 

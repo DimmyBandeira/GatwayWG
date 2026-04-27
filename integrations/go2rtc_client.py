@@ -82,13 +82,15 @@ class Go2RTCClient:
         if src:
             params["src"] = src
 
+        timeout_seconds = 10 if src else 20
+
         try:
-            response = requests.get(f"{self.base_url}/api/onvif", params=params, timeout=4)
+            response = requests.get(f"{self.base_url}/api/onvif", params=params, timeout=timeout_seconds)
             response.raise_for_status()
             payload = response.json()
             if not isinstance(payload, dict):
                 logger.warning("Resposta inesperada do go2rtc /api/onvif: %s", type(payload).__name__)
-                return {"online": True, "streams": []}
+                return {"online": True, "success": True, "streams": []}
 
             streams = payload.get("streams")
             if not isinstance(streams, list):
@@ -96,14 +98,28 @@ class Go2RTCClient:
 
             return {
                 "online": True,
+                "success": True,
                 "streams": streams,
                 "raw": payload,
+            }
+        except requests.Timeout:
+            safe_src = self._mask_url(src) if src else None
+            logger.warning("Timeout no discovery ONVIF go2rtc src=%s", safe_src)
+            return {
+                "online": False,
+                "success": False,
+                "timeout": True,
+                "message": "Discovery ONVIF demorou demais. Use busca por IP.",
+                "hint": "onvif://user:pass@ip:porta",
+                "streams": [],
+                "raw": {},
             }
         except requests.RequestException as exc:
             safe_src = self._mask_url(src) if src else None
             logger.warning("Falha no discovery ONVIF go2rtc src=%s error=%s", safe_src, exc)
             return {
                 "online": False,
+                "success": False,
                 "streams": [],
                 "raw": {},
                 "error": str(exc),

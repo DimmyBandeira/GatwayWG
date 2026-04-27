@@ -60,21 +60,26 @@ class Go2RTCDiscoveryService:
     def discover_onvif(self, src: str | None = None) -> dict[str, Any]:
         result = self._client.discover_onvif(src)
         online = bool(result.get("online", False))
-        raw_streams = result.get("streams") if isinstance(result.get("streams"), list) else []
+        success = bool(result.get("success", False))
 
-        if not online:
+        if not success:
             return {
-                "online": False,
+                "online": online,
+                "success": False,
                 "source": "go2rtc_onvif",
                 "count": 0,
                 "devices": [],
-                "message": "go2rtc offline ou indisponível",
+                "timeout": bool(result.get("timeout", False)),
+                "message": result.get("message", "Falha no discovery ONVIF"),
+                "hint": result.get("hint"),
             }
 
+        raw_streams = result.get("streams") if isinstance(result.get("streams"), list) else []
         devices = [self._normalize_onvif_device(item) for item in raw_streams]
 
         return {
             "online": True,
+            "success": True,
             "source": "go2rtc_onvif",
             "count": len(devices),
             "devices": devices,

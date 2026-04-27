@@ -147,3 +147,6 @@ O Gateway Python atua como **orquestrador de controle**, não como motor de IA:
   - **streams cadastrados**: já existem no go2rtc e aparecem em `/api/streams`;
   - **câmeras ONVIF**: descobertas em rede via `/api/onvif`.
 - Segurança: UI e logs devem mascarar senha quando exibirem URL.
+
+- Operação recomendada: discovery ONVIF **direcionado por IP** (via `src`), evitando varredura geral de rede.
+- `GET /go2rtc/discovery/onvif` sem `src` retorna aviso amigável para usar `onvif://user:pass@ip:porta`.

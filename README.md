@@ -88,3 +88,9 @@ GatwayWG/
   - `/go2rtc/discovery/onvif?src=onvif://admin:senha@192.168.1.50:80`
 
 > Importante: streams cadastrados e dispositivos ONVIF descobertos são conceitos distintos na UI operacional.
+
+
+### Busca ONVIF recomendada
+
+- Priorize busca direcionada por IP: `GET /go2rtc/discovery/onvif?src=onvif://user:pass@ip:porta`.
+- `GET /go2rtc/discovery/onvif` sem `src` é tratado como experimental/lento e retorna orientação amigável para busca direcionada.
