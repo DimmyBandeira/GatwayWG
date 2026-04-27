@@ -164,8 +164,30 @@ function renderGo2rtcStreamsList(){
   const box=document.getElementById('go2rtcStreamsList');
   const select=document.getElementById('go2rtcStreamSelect');
   if(!go2rtcStreams.length){box.innerHTML='Nenhum stream encontrado.'; select.innerHTML='<option value="">(nenhum)</option>'; return;}
-  box.innerHTML=go2rtcStreams.map(s=>`<div class="stream-item"><strong>${escapeHtml(s.name)}</strong><br/>${escapeHtml(s.rtsp_url||'')}</div>`).join('');
+  box.innerHTML=go2rtcStreams.map(s=>`<div class="stream-item"><strong>${escapeHtml(s.name)}</strong><br/>${escapeHtml(s.rtsp_url||'')}<br/><button class="btn btn-sm" onclick="useGo2rtcStream(decodeURIComponent('${encodeURIComponent(s.name)}'),'visible')">Usar como visível</button> <button class="btn btn-sm" onclick="useGo2rtcStream(decodeURIComponent('${encodeURIComponent(s.name)}'),'thermal')">Usar como térmico</button></div>`).join('');
   select.innerHTML=go2rtcStreams.map(s=>`<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join('');
+}
+
+function useGo2rtcStream(streamName, modality){
+  const found=go2rtcStreams.find(s=>s.name===streamName);
+  if(!found) return alert('Stream não encontrado no cache atual.');
+
+  document.getElementById('sourceType').value='go2rtc';
+  onSourceTypeChange();
+
+  const camName=document.getElementById('camName');
+  if(!camName.value.trim()) camName.value=streamName;
+
+  document.getElementById('go2rtcStreamSelect').value=streamName;
+  document.getElementById('go2rtcIsThermal').checked=(modality==='thermal');
+
+  if(modality==='thermal'){
+    document.getElementById('rtspThermalMainName').value=streamName;
+    document.getElementById('rtspThermalMainUrl').value=found?.producers?.[0]?.url||'';
+  }else{
+    document.getElementById('rtspVisibleMainName').value=streamName;
+    document.getElementById('rtspVisibleMainUrl').value=found?.producers?.[0]?.url||'';
+  }
 }
 
 async function checkMasterStatus(){try{const res=await fetch('/health');const span=document.getElementById('masterStatus');span.innerHTML=res.ok?'Online':'Offline';span.className=res.ok?'tag tag-green':'tag tag-red';}catch{document.getElementById('masterStatus').innerHTML='Offline';}}

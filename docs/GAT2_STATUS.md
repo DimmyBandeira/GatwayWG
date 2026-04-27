@@ -98,11 +98,25 @@ O Gateway Python atua como **orquestrador de controle**, não como motor de IA:
 - Sem IA/YOLO/plugin ativo por padrão (`plugins: []`).
 - Limitação atual para `file`: sem upload real no backend; `source_url` usa nome/caminho do arquivo informado no navegador.
 
+
+### Dependências operacionais relevantes
+
+- `python-multipart` é obrigatório para `POST /upload/video` (upload via `multipart/form-data`).
+- Stack legado/fallback de vídeo permanece (`opencv-python`, `av`, `decord`) para rota `GET /stream/{uuid}` em cenários de debug/compatibilidade.
+
+### Fluxo operacional recomendado (fase atual)
+
+1. Verificar saúde: `GET /health` e `GET /go2rtc/health`.
+2. Descobrir streams existentes: `GET /go2rtc/streams` (botão **Buscar streams do go2rtc**).
+3. No `cadastro.html`, usar ações por stream (**Usar como visível** / **Usar como térmico**) para pré-preencher cadastro lógico.
+4. Opcionalmente importar inventário já existente via `POST /sync/import-go2rtc`.
+5. Cadastrar/ajustar câmera em `POST /cameras/` e validar saída RTSP por UUID.
+
 ### ONVIF/discovery (estado real)
 
 - `services/discovery_service.py` está em estado placeholder nesta fase (sem fluxo operacional real exposto na UI).
 - Portanto, o painel de produção não deve prometer descoberta ONVIF automática real neste momento.
-- Status recomendado: **experimental/simulação** até implementação real.
+- Status recomendado: **experimental/simulação** até implementação real (não usar como promessa de produção nesta fase).
 
 ### Modularização mínima do app.py
 
