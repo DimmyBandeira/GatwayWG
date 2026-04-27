@@ -94,3 +94,9 @@ GatwayWG/
 
 - Priorize busca direcionada por IP: `GET /go2rtc/discovery/onvif?src=onvif://user:pass@ip:porta`.
 - `GET /go2rtc/discovery/onvif` sem `src` é tratado como experimental/lento e retorna orientação amigável para busca direcionada.
+
+
+### Hint de rede local (sem scan pesado)
+
+- `GET /network/local-base` sugere IP/base local e portas ONVIF/RTSP comuns para facilitar busca direcionada.
+- Não realiza scan de rede pesada e não adiciona dependência Python ONVIF neste GAT.

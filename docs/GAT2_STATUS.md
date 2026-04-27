@@ -150,3 +150,12 @@ O Gateway Python atua como **orquestrador de controle**, não como motor de IA:
 
 - Operação recomendada: discovery ONVIF **direcionado por IP** (via `src`), evitando varredura geral de rede.
 - `GET /go2rtc/discovery/onvif` sem `src` retorna aviso amigável para usar `onvif://user:pass@ip:porta`.
+
+
+## GAT 2.4.3 — Hint de rede local (referência do legado sem dependência ONVIF)
+
+- O arquivo legado `onvif_discovery.py` foi usado apenas como referência conceitual para obter base de rede local.
+- A biblioteca Python `onvif` **não** é dependência obrigatória nesta fase.
+- Endpoint adicionado: `GET /network/local-base` para sugerir `base_ip` e portas comuns ONVIF/RTSP, sem scan pesado.
+- Discovery principal continua via go2rtc `GET /api/onvif` com busca direcionada por `src`.
+- Scan por faixa e fallback com biblioteca Python ONVIF ficam para etapa futura.

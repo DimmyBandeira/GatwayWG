@@ -112,8 +112,10 @@
         <div class="form-group"><label>Senha</label><input id="onvifPass" type="password" placeholder="••••••"/></div>
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:6px">
+        <button class="btn btn-sm" onclick="detectLocalNetwork()">Detectar rede local</button>
         <button class="btn btn-sm btn-primary" onclick="fetchOnvifProfilesByCamera()">Buscar câmera</button>
       </div>
+      <div class="muted" id="networkHintInfo" style="margin-bottom:6px"></div>
       <div class="muted" style="margin-bottom:8px">Varredura geral é opcional/experimental.</div>
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px">
         <button class="btn btn-sm" onclick="fetchOnvifDevices()">Buscar rede inteira (lento)</button>
@@ -390,6 +392,29 @@ function renderOnvifDevicesList(){
     const host=d.host||extractHost(usable);
     return `<tr><td>${escapeHtml((d.name||('onvif_'+(idx+1))))}</td><td>${escapeHtml(maskSensitiveUrl(d.url||''))}</td><td>${escapeHtml(host||'-')}</td><td><button class="btn btn-sm" onclick="useOnvifDevice(${idx},'visible')">Usar como visível</button> <button class="btn btn-sm" onclick="useOnvifDevice(${idx},'thermal')">Usar como térmico</button></td></tr>`;
   }).join('')}</tbody></table>`;
+}
+
+async function detectLocalNetwork(){
+  const info=document.getElementById('networkHintInfo');
+  const f=document.getElementById('onvifFeedback');
+  f.textContent='⏳ Detectando rede local...';
+  try{
+    const res=await fetch('/network/local-base');
+    if(!res.ok) throw new Error('Falha ao detectar rede local');
+    const data=await res.json();
+
+    const ipInput=document.getElementById('onvifIp');
+    if(ipInput && !ipInput.value.trim()) ipInput.value=data.base_ip;
+
+    const portInput=document.getElementById('onvifPort');
+    if(portInput && !portInput.value.trim()) portInput.value=String((data.suggested_onvif_ports||[80])[0]||80);
+
+    info.textContent=`Rede local: ${data.local_ip} | Base sugerida: ${data.base_ip} | Portas ONVIF: ${(data.suggested_onvif_ports||[]).join(', ')}`;
+    f.textContent='Use a base sugerida para busca direcionada por IP.';
+  }catch(err){
+    info.textContent='Não foi possível detectar a rede local automaticamente.';
+    f.textContent=`Erro de detecção de rede: ${err.message}`;
+  }
 }
 
 async function fetchOnvifDevices(){

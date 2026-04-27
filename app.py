@@ -15,6 +15,7 @@ from integrations.go2rtc_client import Go2RTCClient
 from services.camera_normalizer import normalize_stream_node, payload_has_fakepath, sanitize_plugins
 from services.capture_engine import CaptureEngine
 from services.go2rtc_discovery_service import Go2RTCDiscoveryService
+from services.network_hint_service import get_network_hint
 from services.registry_service import RegistryService
 from services.upload_service import save_video_upload
 
@@ -276,6 +277,15 @@ def health_check() -> Dict[str, str]:
     return {"status": "online", "version": "2.0.0"}
 
 
+@app.get("/network/local-base")
+def network_local_base() -> Dict[str, Any]:
+    hint = get_network_hint()
+    return {
+        "local_ip": hint.local_ip,
+        "base_ip": hint.base_ip,
+        "suggested_onvif_ports": hint.suggested_onvif_ports,
+        "suggested_rtsp_port": hint.suggested_rtsp_port,
+    }
 
 
 @app.post("/upload/video")
