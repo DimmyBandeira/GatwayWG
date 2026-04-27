@@ -97,3 +97,14 @@ O Gateway Python atua como **orquestrador de controle**, não como motor de IA:
   - `go2rtc`: seleção de stream descoberto
 - Sem IA/YOLO/plugin ativo por padrão (`plugins: []`).
 - Limitação atual para `file`: sem upload real no backend; `source_url` usa nome/caminho do arquivo informado no navegador.
+
+### ONVIF/discovery (estado real)
+
+- `services/discovery_service.py` está em estado placeholder nesta fase (sem fluxo operacional real exposto na UI).
+- Portanto, o painel de produção não deve prometer descoberta ONVIF automática real neste momento.
+- Status recomendado: **experimental/simulação** até implementação real.
+
+### Modularização mínima do app.py
+
+- GAT 2.4 iniciou modularização pontual com `services/camera_normalizer.py` para sanitização/validação de payload (incluindo bloqueio de `C:\\fakepath`).
+- Sem refactor amplo de rotas nesta etapa para manter diff controlado.

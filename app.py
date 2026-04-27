@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from integrations.go2rtc_client import Go2RTCClient
+from services.camera_normalizer import normalize_stream_node, payload_has_fakepath, sanitize_plugins
 from services.capture_engine import CaptureEngine
 from services.registry_service import RegistryService
 
@@ -64,20 +65,6 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _normalize_stream_node(node: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    if not isinstance(node, dict):
-        return None
-    return {
-        "stream_name": node.get("stream_name"),
-        "source_url": node.get("source_url", ""),
-    }
-
-
-
-
-def _sanitize_plugins(plugins: Optional[List[str]]) -> List[str]:
-    values = plugins or []
-    return [item for item in values if str(item).strip().lower() != "yolo"]
 
 
 def _normalize_camera(payload: CameraPayload) -> Dict[str, Any]:
@@ -88,10 +75,10 @@ def _normalize_camera(payload: CameraPayload) -> Dict[str, Any]:
     visible_payload = streams_payload.get("visible", {}) if isinstance(streams_payload.get("visible", {}), dict) else {}
     thermal_payload = streams_payload.get("thermal", {}) if isinstance(streams_payload.get("thermal", {}), dict) else {}
 
-    visible_main = _normalize_stream_node(visible_payload.get("main"))
-    visible_sub = _normalize_stream_node(visible_payload.get("sub"))
-    thermal_main = _normalize_stream_node(thermal_payload.get("main"))
-    thermal_sub = _normalize_stream_node(thermal_payload.get("sub"))
+    visible_main = normalize_stream_node(visible_payload.get("main"))
+    visible_sub = normalize_stream_node(visible_payload.get("sub"))
+    thermal_main = normalize_stream_node(thermal_payload.get("main"))
+    thermal_sub = normalize_stream_node(thermal_payload.get("sub"))
 
     source_type = payload.source_type or payload.type
     source_url = payload.source_url if payload.source_url is not None else payload.path
@@ -110,6 +97,9 @@ def _normalize_camera(payload: CameraPayload) -> Dict[str, Any]:
         "visible": {"main": visible_main, "sub": visible_sub},
         "thermal": {"main": thermal_main, "sub": thermal_sub},
     }
+
+    if payload_has_fakepath(streams, source_url or ""):
+        raise ValueError("Caminho inválido: C:/fakepath não é acessível pelo servidor Gateway")
 
     has_visible = bool(visible_main and visible_main.get("stream_name"))
     has_visible_sub = bool(visible_sub and visible_sub.get("stream_name"))
@@ -136,7 +126,7 @@ def _normalize_camera(payload: CameraPayload) -> Dict[str, Any]:
         "source_type": source_type or "go2rtc",
         "enabled": bool(payload.enabled) if payload.enabled is not None else True,
         "video_wall": bool(video_wall),
-        "plugins": _sanitize_plugins(payload.plugins),
+        "plugins": sanitize_plugins(payload.plugins),
         "node": payload.node or "auto",
         "created_at": created_at,
     }
