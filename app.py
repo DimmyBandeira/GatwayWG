@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import cv2
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
@@ -303,7 +303,18 @@ def go2rtc_streams() -> List[Dict[str, Any]]:
 
 @app.get("/go2rtc/discovery")
 def go2rtc_discovery() -> Dict[str, Any]:
-    return go2rtc_discovery_service.discover()
+    # compatibilidade retroativa: retorna streams já cadastrados
+    return go2rtc_discovery_service.discover_streams()
+
+
+@app.get("/go2rtc/discovery/streams")
+def go2rtc_discovery_streams() -> Dict[str, Any]:
+    return go2rtc_discovery_service.discover_streams()
+
+
+@app.get("/go2rtc/discovery/onvif")
+def go2rtc_discovery_onvif(src: Optional[str] = Query(default=None)) -> Dict[str, Any]:
+    return go2rtc_discovery_service.discover_onvif(src=src)
 
 
 @app.get("/sync/status")

@@ -91,8 +91,9 @@
     </div>
 
     <div id="go2rtcFields" class="hidden">
+      <div class="card-title" style="font-size:14px">A) Streams já cadastrados no go2rtc</div>
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px">
-        <button class="btn btn-sm" onclick="fetchGo2rtcStreams()">Buscar streams do go2rtc</button>
+        <button class="btn btn-sm" onclick="fetchGo2rtcStreams()">Buscar streams cadastrados</button>
         <button class="btn btn-sm" onclick="importFromGo2rtc()">Importar streams do go2rtc</button>
         <span id="importFeedback" class="muted"></span>
       </div>
@@ -101,6 +102,22 @@
         <div class="form-group"><label><input type="checkbox" id="go2rtcIsThermal"/> Usar como térmico ao salvar</label></div>
       </div>
       <div id="go2rtcStreamsList" class="discovery-table-wrap"><div class="loading">Nenhum stream carregado.</div></div>
+
+      <div class="card-title" style="font-size:14px; margin-top:16px">B) Descobrir câmeras ONVIF na rede</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px">
+        <button class="btn btn-sm" onclick="fetchOnvifDevices()">Buscar câmeras ONVIF</button>
+        <span id="onvifFeedback" class="muted"></span>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>IP ONVIF</label><input id="onvifIp" placeholder="192.168.1.50"/></div>
+        <div class="form-group"><label>Porta ONVIF</label><input id="onvifPort" type="number" value="80"/></div>
+        <div class="form-group"><label>Usuário</label><input id="onvifUser" placeholder="admin"/></div>
+        <div class="form-group"><label>Senha</label><input id="onvifPass" type="password" placeholder="••••••"/></div>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px">
+        <button class="btn btn-sm" onclick="fetchOnvifProfilesByCamera()">Buscar perfis desta câmera</button>
+      </div>
+      <div id="onvifDevicesList" class="discovery-table-wrap"><div class="loading">Nenhum dispositivo ONVIF carregado.</div></div>
     </div>
 
     <div id="fileFields" class="hidden">
@@ -144,12 +161,33 @@
 <script>
 let cameras = [];
 let go2rtcStreams = [];
+let onvifDevices = [];
 
 const isFakePath = (value) => (value || '').toLowerCase().startsWith('c:\\fakepath');
 
 function generateUUID(){return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16);});}
 function safeSlug(t){return (t||'').toLowerCase().trim().replace(/\s+/g,'-').replace(/[^a-z0-9-_]/g,'');}
 function makeStream(n,u){const sn=(n||'').trim(),su=(u||'').trim(); if(!sn&&!su) return null; return {stream_name: sn||null, source_url: su||''};}
+
+function maskSensitiveUrl(url){
+  if(!url) return '';
+  try{
+    const parsed=new URL(url);
+    if(parsed.password){
+      parsed.password='***';
+      return parsed.toString();
+    }
+    return url;
+  }catch{
+    return String(url).replace(/(:\/\/[^:@\/]+:)([^@\/]+)@/,'$1***@');
+  }
+}
+
+function extractHost(url){
+  if(!url) return '-';
+  try{return new URL(url).hostname||'-';}catch{return '-';}
+}
+
 
 function clearFieldErrors(){
   document.querySelectorAll('.field-error').forEach(el=>el.remove());
@@ -217,7 +255,7 @@ function testAssistedRtsp(){
 
 function modeHelpText(mode){
   if(mode==='camera_ip') return 'Modo assistido: informe IP, usuário e senha. O RTSP será montado automaticamente.';
-  if(mode==='go2rtc') return 'Discovery: selecione stream existente no go2rtc ou use os botões da tabela.';
+  if(mode==='go2rtc') return 'Use áreas separadas: streams já cadastrados e descoberta ONVIF na rede.';
   if(mode==='file') return 'Arquivo de vídeo: use upload ou caminho existente no servidor.';
   return 'Avançado: informe RTSP completo manualmente.';
 }
@@ -324,7 +362,7 @@ async function checkGo2rtcStatus(){try{const res=await fetch('/go2rtc/health');c
 async function fetchGo2rtcStreams(){
   const f=document.getElementById('importFeedback'); f.textContent='Consultando go2rtc...';
   try{
-    const res=await fetch('/go2rtc/discovery');
+    const res=await fetch('/go2rtc/discovery/streams');
     if(!res.ok) throw new Error('go2rtc offline ou indisponível');
     const data=await res.json();
     go2rtcStreams=Array.isArray(data.streams)?data.streams:[];
@@ -335,6 +373,96 @@ async function fetchGo2rtcStreams(){
     renderGo2rtcStreamsList();
     f.textContent=`Erro: ${err.message}`;
   }
+}
+
+function renderOnvifDevicesList(){
+  const box=document.getElementById('onvifDevicesList');
+  if(!onvifDevices.length){
+    box.innerHTML='<div class="loading">Nenhum dispositivo ONVIF encontrado.</div>';
+    return;
+  }
+
+  box.innerHTML=`<table class="discovery-table"><thead><tr><th>nome</th><th>url</th><th>host/ip</th><th>ações</th></tr></thead><tbody>${onvifDevices.map((d,idx)=>{
+    const usable=d.rtsp_url||d.url||'';
+    const host=d.host||extractHost(usable);
+    return `<tr><td>${escapeHtml((d.name||('onvif_'+(idx+1))))}</td><td>${escapeHtml(maskSensitiveUrl(d.url||''))}</td><td>${escapeHtml(host||'-')}</td><td><button class="btn btn-sm" onclick="useOnvifDevice(${idx},'visible')">Usar como visível</button> <button class="btn btn-sm" onclick="useOnvifDevice(${idx},'thermal')">Usar como térmico</button></td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+async function fetchOnvifDevices(){
+  const f=document.getElementById('onvifFeedback');
+  f.textContent='Consultando ONVIF via go2rtc...';
+  try{
+    const res=await fetch('/go2rtc/discovery/onvif');
+    if(!res.ok) throw new Error('Falha ao consultar ONVIF no go2rtc');
+    const data=await res.json();
+    onvifDevices=Array.isArray(data.devices)?data.devices:[];
+    renderOnvifDevicesList();
+    f.textContent=`Dispositivos ONVIF encontrados: ${onvifDevices.length}`;
+  }catch(err){
+    onvifDevices=[];
+    renderOnvifDevicesList();
+    f.textContent=`Erro ONVIF: ${err.message}`;
+  }
+}
+
+async function fetchOnvifProfilesByCamera(){
+  const ip=document.getElementById('onvifIp').value.trim();
+  const port=(document.getElementById('onvifPort').value||'80').trim();
+  const user=document.getElementById('onvifUser').value.trim();
+  const pass=document.getElementById('onvifPass').value.trim();
+  const f=document.getElementById('onvifFeedback');
+
+  if(!ip || !user || !pass){
+    f.textContent='Preencha IP, usuário e senha para busca direcionada ONVIF.';
+    return;
+  }
+
+  const src=`onvif://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${ip}:${port}`;
+  f.textContent='Consultando perfis ONVIF da câmera...';
+  try{
+    const res=await fetch(`/go2rtc/discovery/onvif?src=${encodeURIComponent(src)}`);
+    if(!res.ok) throw new Error('Falha ao consultar perfis ONVIF da câmera');
+    const data=await res.json();
+    onvifDevices=Array.isArray(data.devices)?data.devices:[];
+    renderOnvifDevicesList();
+    f.textContent=`Perfis/streams ONVIF encontrados: ${onvifDevices.length}`;
+  }catch(err){
+    onvifDevices=[];
+    renderOnvifDevicesList();
+    f.textContent=`Erro ONVIF: ${err.message}`;
+  }
+}
+
+function useOnvifDevice(index, modality){
+  const item=onvifDevices[index];
+  if(!item) return;
+
+  const usableUrl=item.rtsp_url||item.url||'';
+  const streamName=safeSlug(item.name||'onvif')||`onvif-${index+1}`;
+
+  if(!document.getElementById('camName').value.trim()){
+    document.getElementById('camName').value=item.name||`ONVIF ${index+1}`;
+  }
+
+  if(usableUrl.startsWith('rtsp://')){
+    document.getElementById('registrationMode').value='advanced';
+    onRegistrationModeChange();
+    document.getElementById('advancedRtspUrl').value=usableUrl;
+    document.getElementById('advancedStreamName').value=streamName;
+    document.getElementById('advancedIsThermal').checked=(modality==='thermal');
+    setFormFeedback('URL RTSP ONVIF aplicada no modo avançado.','success');
+    return;
+  }
+
+  document.getElementById('registrationMode').value='go2rtc';
+  onRegistrationModeChange();
+  document.getElementById('go2rtcIsThermal').checked=(modality==='thermal');
+  const found=go2rtcStreams.find(s=>(s.stream_name||s.name)===streamName);
+  if(found){
+    document.getElementById('go2rtcStreamSelect').value=streamName;
+  }
+  setFormFeedback('Dispositivo ONVIF aplicado. Se necessário, ajuste stream no modo go2rtc.','success');
 }
 
 async function importFromGo2rtc(){

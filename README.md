@@ -76,3 +76,15 @@ GatwayWG/
 - Endpoint: `GET /go2rtc/discovery`
 - Objetivo: listar streams já existentes no go2rtc em formato normalizado para preencher cadastro por tipo (`visible/thermal` e `main/sub`) na UI.
 - Fora de escopo: ONVIF real, alteração dinâmica de `go2rtc.yaml`, IA/YOLO/DeepStream.
+
+
+## Discovery ONVIF via go2rtc
+
+- go2rtc oferece endpoint de discovery ONVIF real: `GET /api/onvif` (com `src` opcional).
+- O Gateway expõe wrappers:
+  - `GET /go2rtc/discovery/streams` (streams já cadastrados)
+  - `GET /go2rtc/discovery/onvif` (descoberta ONVIF na rede)
+- Exemplo de busca direcionada:
+  - `/go2rtc/discovery/onvif?src=onvif://admin:senha@192.168.1.50:80`
+
+> Importante: streams cadastrados e dispositivos ONVIF descobertos são conceitos distintos na UI operacional.

@@ -24,7 +24,9 @@ O Gateway Python atua como **orquestrador de controle**, não como motor de IA:
 - `GET /health` — saúde do Gateway Python.
 - `GET /go2rtc/health` — saúde do go2rtc (sem derrubar a aplicação em falha).
 - `GET /go2rtc/streams` — inventário raw/compatível de streams ativos no go2rtc.
-- `GET /go2rtc/discovery` — discovery operacional normalizado para UI (ações de preenchimento por role/profile).
+- `GET /go2rtc/discovery` — compatibilidade (retorna streams cadastrados no go2rtc).
+- `GET /go2rtc/discovery/streams` — streams já cadastrados no go2rtc (`/api/streams`).
+- `GET /go2rtc/discovery/onvif` — discovery ONVIF real via go2rtc (`/api/onvif`).
 - `GET /cameras/` — lista de câmeras persistidas + URLs normalizadas.
 - `GET /cameras/{uuid}` — detalhe de câmera persistida + URLs normalizadas.
 - `POST /cameras/` — cadastro de câmera (com compatibilidade de contrato legado).
@@ -132,3 +134,16 @@ O Gateway Python atua como **orquestrador de controle**, não como motor de IA:
 - Limite simples de tamanho: `200MB`.
 - `cadastro.html` envia arquivo automaticamente ao selecionar e usa `file_path` retornado como `source_url`.
 - `C:\\fakepath` continua bloqueado no frontend e backend.
+
+
+## GAT 2.4.2 — Discovery ONVIF real via go2rtc
+
+- Gateway usa endpoint real do go2rtc: `GET /api/onvif` (com `src` opcional).
+- Wrapper no Gateway:
+  - `GET /go2rtc/discovery/streams`
+  - `GET /go2rtc/discovery/onvif`
+  - `GET /go2rtc/discovery/onvif?src=onvif://admin:senha@192.168.1.50:80`
+- Diferença operacional:
+  - **streams cadastrados**: já existem no go2rtc e aparecem em `/api/streams`;
+  - **câmeras ONVIF**: descobertas em rede via `/api/onvif`.
+- Segurança: UI e logs devem mascarar senha quando exibirem URL.
