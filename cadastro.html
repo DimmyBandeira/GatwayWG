@@ -34,6 +34,11 @@
   .discovery-table{width:100%; border-collapse:collapse; font-size:12px}
   .discovery-table th,.discovery-table td{padding:8px; border-bottom:1px solid #f1f5f9; text-align:left; vertical-align:top}
   .discovery-table th{background:#f8fafc; font-weight:600}
+  .input-error{border-color:#dc2626 !important; background:#fef2f2}
+  .field-error{font-size:12px; color:#dc2626; margin-top:4px}
+  .form-feedback{margin-top:10px; font-size:13px}
+  .form-feedback.error{color:#b91c1c}
+  .form-feedback.success{color:#166534}
 </style>
 </head>
 <body>
@@ -80,6 +85,9 @@
         <div class="form-group"><label><input type="checkbox" id="camHasThermal"/> Possui térmica</label></div>
         <div class="form-group"><label>RTSP gerado (prévia)</label><input id="camRtspPreview" readonly/></div>
       </div>
+      <div class="form-row">
+        <div class="form-group"><button class="btn btn-sm" type="button" onclick="testAssistedRtsp()">Testar conexão RTSP</button> <span id="rtspTestFeedback" class="muted"></span></div>
+      </div>
     </div>
 
     <div id="go2rtcFields" class="hidden">
@@ -121,6 +129,7 @@
     </div>
 
     <button class="btn btn-primary" onclick="saveCamera()">💾 Salvar</button>
+    <div id="formFeedback" class="form-feedback"></div>
   </div>
 
   <div class="card">
@@ -141,6 +150,70 @@ const isFakePath = (value) => (value || '').toLowerCase().startsWith('c:\\fakepa
 function generateUUID(){return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16);});}
 function safeSlug(t){return (t||'').toLowerCase().trim().replace(/\s+/g,'-').replace(/[^a-z0-9-_]/g,'');}
 function makeStream(n,u){const sn=(n||'').trim(),su=(u||'').trim(); if(!sn&&!su) return null; return {stream_name: sn||null, source_url: su||''};}
+
+function clearFieldErrors(){
+  document.querySelectorAll('.field-error').forEach(el=>el.remove());
+  document.querySelectorAll('.input-error').forEach(el=>el.classList.remove('input-error'));
+}
+
+function setFieldError(inputId, message){
+  const input=document.getElementById(inputId);
+  if(!input) return;
+  input.classList.add('input-error');
+  const err=document.createElement('div');
+  err.className='field-error';
+  err.textContent=message;
+  input.insertAdjacentElement('afterend', err);
+}
+
+function setFormFeedback(message, type='error'){
+  const box=document.getElementById('formFeedback');
+  if(!box) return;
+  box.className=`form-feedback ${type}`;
+  box.textContent=message||'';
+}
+
+function isValidIp(ip){
+  if(!ip) return false;
+  const re=/^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+  return re.test(ip);
+}
+
+function isValidPort(portValue){
+  const port=Number(portValue);
+  return Number.isInteger(port) && port>=1 && port<=65535;
+}
+
+function validateAssistedFields(showErrors=true){
+  const ip=document.getElementById('camIp').value.trim();
+  const port=document.getElementById('camPort').value.trim()||'554';
+  const user=document.getElementById('camUser').value.trim();
+  const pass=document.getElementById('camPass').value.trim();
+
+  let ok=true;
+  if(showErrors) clearFieldErrors();
+
+  if(!isValidIp(ip)){ ok=false; if(showErrors) setFieldError('camIp','Informe um IPv4 válido (ex.: 192.168.1.64).'); }
+  if(!isValidPort(port)){ ok=false; if(showErrors) setFieldError('camPort','Porta inválida (use 1 a 65535).'); }
+  if(!user){ ok=false; if(showErrors) setFieldError('camUser','Usuário é obrigatório.'); }
+  if(!pass){ ok=false; if(showErrors) setFieldError('camPass','Senha é obrigatória.'); }
+
+  return ok;
+}
+
+function testAssistedRtsp(){
+  const feedback=document.getElementById('rtspTestFeedback');
+  if(!validateAssistedFields(true)){
+    feedback.textContent='Corrija os campos destacados para gerar RTSP válido.';
+    return;
+  }
+  const rtsp=buildRtspUrl();
+  if(!rtsp){
+    feedback.textContent='Não foi possível gerar RTSP com os dados informados.';
+    return;
+  }
+  feedback.textContent=`Pré-validação OK. URL gerada: ${rtsp}`;
+}
 
 function modeHelpText(mode){
   if(mode==='camera_ip') return 'Modo assistido: informe IP, usuário e senha. O RTSP será montado automaticamente.';
@@ -181,6 +254,10 @@ function buildRtspUrl(){
 function updateRtspPreview(){
   const preview=document.getElementById('camRtspPreview');
   if(preview) preview.value=buildRtspUrl();
+  const ipEl=document.getElementById('camIp');
+  const portEl=document.getElementById('camPort');
+  if(ipEl) ipEl.classList.toggle('input-error', Boolean(ipEl.value.trim()) && !isValidIp(ipEl.value.trim()));
+  if(portEl) portEl.classList.toggle('input-error', Boolean(portEl.value.trim()) && !isValidPort(portEl.value.trim()));
 }
 
 async function uploadSelectedFile(){
@@ -281,9 +358,16 @@ function renderList(){
 }
 
 async function saveCamera(){
+  clearFieldErrors();
+  setFormFeedback('');
+
   const name=document.getElementById('camName').value.trim();
   const mode=document.getElementById('registrationMode').value;
-  if(!name) return alert('Preencha o nome da câmera.');
+  if(!name){
+    setFieldError('camName','Nome da câmera é obrigatório.');
+    setFormFeedback('Preencha os campos obrigatórios para salvar.','error');
+    return;
+  }
 
   const slug=safeSlug(name)||generateUUID();
   const streams={visible:{main:null,sub:null},thermal:{main:null,sub:null}};
@@ -291,8 +375,15 @@ async function saveCamera(){
   let sourceType='rtsp';
 
   if(mode==='camera_ip'){
+    if(!validateAssistedFields(true)){
+      setFormFeedback('Corrija os campos obrigatórios do modo assistido.','error');
+      return;
+    }
     const rtsp=buildRtspUrl();
-    if(!rtsp) return alert('Preencha IP, usuário e senha para gerar RTSP.');
+    if(!rtsp){
+      setFormFeedback('Não foi possível gerar RTSP com os dados informados.','error');
+      return;
+    }
     const streamType=document.getElementById('camStreamType').value;
     const mainName=`${slug}-${streamType}`;
     streams.visible.main=makeStream(mainName, rtsp);
@@ -303,7 +394,11 @@ async function saveCamera(){
     sourceType='rtsp';
   } else if(mode==='go2rtc'){
     const selected=document.getElementById('go2rtcStreamSelect').value;
-    if(!selected) return alert('Selecione um stream do go2rtc.');
+    if(!selected){
+      setFieldError('go2rtcStreamSelect','Selecione um stream do go2rtc.');
+      setFormFeedback('Selecione um stream para continuar.','error');
+      return;
+    }
     const found=go2rtcStreams.find(s=>(s.stream_name||s.name)===selected);
     const node=makeStream(selected, found?.source_url||found?.producers?.[0]?.url||'');
     if(document.getElementById('go2rtcIsThermal').checked) streams.thermal.main=node; else streams.visible.main=node;
@@ -311,8 +406,16 @@ async function saveCamera(){
     sourceType='go2rtc';
   } else if(mode==='file'){
     const serverPath=document.getElementById('fileServerPath').value.trim();
-    if(!serverPath) return alert('Informe o caminho local acessível pelo servidor Gateway.');
-    if(isFakePath(serverPath)) return alert('Caminho inválido: C:\\fakepath não é aceito.');
+    if(!serverPath){
+      setFieldError('fileServerPath','Informe o caminho local acessível pelo servidor Gateway.');
+      setFormFeedback('Preencha os campos obrigatórios do modo arquivo.','error');
+      return;
+    }
+    if(isFakePath(serverPath)){
+      setFieldError('fileServerPath','Caminho inválido: C\\\\fakepath não é aceito.');
+      setFormFeedback('Use upload ou caminho real do servidor.','error');
+      return;
+    }
     const streamName=document.getElementById('fileStreamName').value.trim() || `${slug}-file-main`;
     const node=makeStream(streamName, serverPath);
     if(document.getElementById('fileIsThermal').checked) streams.thermal.main=node; else streams.visible.main=node;
@@ -321,7 +424,12 @@ async function saveCamera(){
   } else {
     const rtsp=document.getElementById('advancedRtspUrl').value.trim();
     const streamName=document.getElementById('advancedStreamName').value.trim();
-    if(!rtsp || !streamName) return alert('Preencha RTSP completo e stream_name no modo avançado.');
+    if(!rtsp){ setFieldError('advancedRtspUrl','Informe o RTSP completo.'); }
+    if(!streamName){ setFieldError('advancedStreamName','Informe stream_name.'); }
+    if(!rtsp || !streamName){
+      setFormFeedback('Preencha os campos obrigatórios do modo avançado.','error');
+      return;
+    }
     const node=makeStream(streamName, rtsp);
     if(document.getElementById('advancedIsThermal').checked) streams.thermal.main=node; else streams.visible.main=node;
     sourceUrlCompat=rtsp;
@@ -329,7 +437,15 @@ async function saveCamera(){
   }
 
   const payload={uuid:generateUUID(),name,source_type:sourceType,source_url:sourceUrlCompat,enabled:true,video_wall:true,node:document.getElementById('clusterNode').value,plugins:[],streams};
-  try{const res=await fetch('/cameras/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await res.json().catch(()=>({}));if(!res.ok) throw new Error(data.detail||'Erro ao cadastrar a câmera. Revise os dados e tente novamente.');await loadCameras();alert(`✅ Câmera "${name}" cadastrada com sucesso.`);}catch(err){alert(`❌ ${err.message}`);}  
+  try{
+    const res=await fetch('/cameras/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.detail||'Erro ao cadastrar a câmera. Revise os dados e tente novamente.');
+    await loadCameras();
+    setFormFeedback(`Câmera "${name}" cadastrada com sucesso.`,'success');
+  }catch(err){
+    setFormFeedback(err.message||'Erro inesperado ao cadastrar câmera.','error');
+  }
 }
 
 async function testStream(uuid){
