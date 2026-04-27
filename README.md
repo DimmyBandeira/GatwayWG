@@ -69,3 +69,10 @@ GatwayWG/
 ```
 
 > Componentes de cluster, batching, VideoWall e plugins analíticos são mantidos como referência de evolução arquitetural (roadmap), não como recursos ativos desta fase.
+
+
+## Discovery operacional (GAT-12)
+
+- Endpoint: `GET /go2rtc/discovery`
+- Objetivo: listar streams já existentes no go2rtc em formato normalizado para preencher cadastro por tipo (`visible/thermal` e `main/sub`) na UI.
+- Fora de escopo: ONVIF real, alteração dinâmica de `go2rtc.yaml`, IA/YOLO/DeepStream.

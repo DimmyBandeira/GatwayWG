@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from integrations.go2rtc_client import Go2RTCClient
 from services.camera_normalizer import normalize_stream_node, payload_has_fakepath, sanitize_plugins
 from services.capture_engine import CaptureEngine
+from services.go2rtc_discovery_service import Go2RTCDiscoveryService
 from services.registry_service import RegistryService
 from services.upload_service import save_video_upload
 
@@ -38,6 +39,7 @@ STREAM_SLOTS: List[Tuple[str, str]] = [
 
 registry_service = RegistryService()
 go2rtc_client = Go2RTCClient()
+go2rtc_discovery_service = Go2RTCDiscoveryService(go2rtc_client)
 active_engines: Dict[str, CaptureEngine] = {}
 
 
@@ -297,6 +299,11 @@ def go2rtc_health() -> Dict[str, Any]:
 @app.get("/go2rtc/streams")
 def go2rtc_streams() -> List[Dict[str, Any]]:
     return go2rtc_client.get_active_streams()
+
+
+@app.get("/go2rtc/discovery")
+def go2rtc_discovery() -> Dict[str, Any]:
+    return go2rtc_discovery_service.discover()
 
 
 @app.get("/sync/status")

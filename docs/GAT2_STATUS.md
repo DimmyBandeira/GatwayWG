@@ -23,7 +23,8 @@ O Gateway Python atua como **orquestrador de controle**, não como motor de IA:
 - `GET /` — UI de cadastro.
 - `GET /health` — saúde do Gateway Python.
 - `GET /go2rtc/health` — saúde do go2rtc (sem derrubar a aplicação em falha).
-- `GET /go2rtc/streams` — inventário de streams ativos no go2rtc.
+- `GET /go2rtc/streams` — inventário raw/compatível de streams ativos no go2rtc.
+- `GET /go2rtc/discovery` — discovery operacional normalizado para UI (ações de preenchimento por role/profile).
 - `GET /cameras/` — lista de câmeras persistidas + URLs normalizadas.
 - `GET /cameras/{uuid}` — detalhe de câmera persistida + URLs normalizadas.
 - `POST /cameras/` — cadastro de câmera (com compatibilidade de contrato legado).

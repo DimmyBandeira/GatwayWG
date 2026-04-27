@@ -164,12 +164,16 @@ function renderGo2rtcStreamsList(){
   const box=document.getElementById('go2rtcStreamsList');
   const select=document.getElementById('go2rtcStreamSelect');
   if(!go2rtcStreams.length){box.innerHTML='Nenhum stream encontrado.'; select.innerHTML='<option value="">(nenhum)</option>'; return;}
-  box.innerHTML=go2rtcStreams.map(s=>`<div class="stream-item"><strong>${escapeHtml(s.name)}</strong><br/>${escapeHtml(s.rtsp_url||'')}<br/><button class="btn btn-sm" onclick="useGo2rtcStream(decodeURIComponent('${encodeURIComponent(s.name)}'),'visible')">Usar como visível</button> <button class="btn btn-sm" onclick="useGo2rtcStream(decodeURIComponent('${encodeURIComponent(s.name)}'),'thermal')">Usar como térmico</button></div>`).join('');
-  select.innerHTML=go2rtcStreams.map(s=>`<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join('');
+  box.innerHTML=go2rtcStreams.map(s=>{
+    const streamName=s.stream_name||s.name||'';
+    const source=s.source_url||s.rtsp_url||'';
+    return `<div class="stream-item"><strong>${escapeHtml(streamName)}</strong><br/>${escapeHtml(source)}<br/><button class="btn btn-sm" onclick="useGo2rtcStream(decodeURIComponent('${encodeURIComponent(streamName)}'),'visible','main')">Visible main</button> <button class="btn btn-sm" onclick="useGo2rtcStream(decodeURIComponent('${encodeURIComponent(streamName)}'),'visible','sub')">Visible sub</button> <button class="btn btn-sm" onclick="useGo2rtcStream(decodeURIComponent('${encodeURIComponent(streamName)}'),'thermal','main')">Thermal main</button> <button class="btn btn-sm" onclick="useGo2rtcStream(decodeURIComponent('${encodeURIComponent(streamName)}'),'thermal','sub')">Thermal sub</button></div>`;
+  }).join('');
+  select.innerHTML=go2rtcStreams.map(s=>{const streamName=s.stream_name||s.name||''; return `<option value="${escapeHtml(streamName)}">${escapeHtml(streamName)}</option>`;}).join('');
 }
 
-function useGo2rtcStream(streamName, modality){
-  const found=go2rtcStreams.find(s=>s.name===streamName);
+function useGo2rtcStream(streamName, modality, profile='main'){
+  const found=go2rtcStreams.find(s=>(s.stream_name||s.name)===streamName);
   if(!found) return alert('Stream não encontrado no cache atual.');
 
   document.getElementById('sourceType').value='go2rtc';
@@ -181,12 +185,23 @@ function useGo2rtcStream(streamName, modality){
   document.getElementById('go2rtcStreamSelect').value=streamName;
   document.getElementById('go2rtcIsThermal').checked=(modality==='thermal');
 
+  const sourceUrl=found?.source_url||found?.producers?.[0]?.url||'';
   if(modality==='thermal'){
-    document.getElementById('rtspThermalMainName').value=streamName;
-    document.getElementById('rtspThermalMainUrl').value=found?.producers?.[0]?.url||'';
+    if(profile==='sub'){
+      document.getElementById('rtspThermalSubName').value=streamName;
+      document.getElementById('rtspThermalSubUrl').value=sourceUrl;
+    }else{
+      document.getElementById('rtspThermalMainName').value=streamName;
+      document.getElementById('rtspThermalMainUrl').value=sourceUrl;
+    }
   }else{
-    document.getElementById('rtspVisibleMainName').value=streamName;
-    document.getElementById('rtspVisibleMainUrl').value=found?.producers?.[0]?.url||'';
+    if(profile==='sub'){
+      document.getElementById('rtspVisibleSubName').value=streamName;
+      document.getElementById('rtspVisibleSubUrl').value=sourceUrl;
+    }else{
+      document.getElementById('rtspVisibleMainName').value=streamName;
+      document.getElementById('rtspVisibleMainUrl').value=sourceUrl;
+    }
   }
 }
 
@@ -195,7 +210,14 @@ async function checkGo2rtcStatus(){try{const res=await fetch('/go2rtc/health');c
 
 async function fetchGo2rtcStreams(){
   const f=document.getElementById('importFeedback'); f.textContent='Consultando go2rtc...';
-  try{const res=await fetch('/go2rtc/streams'); if(!res.ok) throw new Error('go2rtc offline ou indisponível'); go2rtcStreams=await res.json(); renderGo2rtcStreamsList(); f.textContent=`Streams encontrados: ${go2rtcStreams.length}`;}catch(err){go2rtcStreams=[]; renderGo2rtcStreamsList(); f.textContent=`Erro: ${err.message}`;}
+  try{
+    const res=await fetch('/go2rtc/discovery');
+    if(!res.ok) throw new Error('go2rtc offline ou indisponível');
+    const data=await res.json();
+    go2rtcStreams=Array.isArray(data.streams)?data.streams:[];
+    renderGo2rtcStreamsList();
+    f.textContent=`Streams encontrados: ${go2rtcStreams.length}`;
+  }catch(err){go2rtcStreams=[]; renderGo2rtcStreamsList(); f.textContent=`Erro: ${err.message}`;}
 }
 
 async function importFromGo2rtc(){
@@ -245,8 +267,8 @@ async function saveCamera(){
   } else {
     const selected=document.getElementById('go2rtcStreamSelect').value;
     if(!selected) return alert('Selecione um stream do go2rtc.');
-    const found=go2rtcStreams.find(s=>s.name===selected);
-    const node=makeStream(selected, found?.producers?.[0]?.url||'');
+    const found=go2rtcStreams.find(s=>(s.stream_name||s.name)===selected);
+    const node=makeStream(selected, found?.source_url||found?.producers?.[0]?.url||'');
     if(document.getElementById('go2rtcIsThermal').checked) streams.thermal.main=node; else streams.visible.main=node;
     sourceUrlCompat=node.source_url||'';
   }
