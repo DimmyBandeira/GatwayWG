@@ -1,0 +1,17 @@
+{
+  "gateway_ip": "192.168.10.100",
+  "rtsp_port": 8554,
+  "http_port": 8080,
+  "auth_user": "admin",
+  "auth_pass": "CHANGE_ME",
+  "devices": [
+    {
+      "virtual_ip": "192.168.10.201",
+      "camera_uuid": "uuid-camera-1",
+      "name": "Camera Virtual 01",
+      "manufacturer": "GatwayWG",
+      "model": "Virtual ONVIF Camera",
+      "profile_token": "Profile_1"
+    }
+  ]
+}
