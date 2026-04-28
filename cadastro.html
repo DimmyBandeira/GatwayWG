@@ -23,6 +23,7 @@
   .mode-card:hover{border-color:#1677ff; transform:translateY(-1px)}
   .mode-card.active{background:#eff6ff; border-color:#1677ff; color:#1d4ed8}
   .cam-item{display:flex; justify-content:space-between; align-items:center; padding:12px; border:1px solid #e5e7eb; border-radius:8px; margin-bottom:8px}
+  .cam-item.selected{border-color:#3b82f6; box-shadow:0 8px 24px rgba(59,130,246,.2)}
   .cam-info{flex:1}
   .cam-name{font-weight:600; margin-bottom:4px}
   .cam-details{font-size:12px; color:#6b7280}
@@ -44,6 +45,11 @@
   .form-feedback{margin-top:10px; font-size:13px}
   .form-feedback.error{color:#b91c1c}
   .form-feedback.success{color:#166534}
+  .toast-wrap{position:fixed; right:12px; bottom:12px; display:flex; flex-direction:column; gap:8px; z-index:1000}
+  .toast{padding:10px 12px; border-radius:8px; color:#fff; font-size:12px; box-shadow:0 4px 14px rgba(0,0,0,.2)}
+  .toast.success{background:#16a34a}
+  .toast.error{background:#dc2626}
+  .toast.info{background:#2563eb}
 </style>
 </head>
 <body>
@@ -145,15 +151,20 @@
   <div class="card">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
       <div class="card-title" style="margin:0; border:none; padding:0">📷 Câmeras</div>
-      <span id="camCount" class="tag">0</span>
+      <div style="display:flex; align-items:center; gap:12px">
+        <label class="muted"><input type="checkbox" id="showOnlineOnly" onchange="onOnlineFilterChange()"/> Mostrar apenas online</label>
+        <span id="camCount" class="tag">0</span>
+      </div>
     </div>
     <div id="camerasList"><div class="loading">Carregando...</div></div>
   </div>
 </div>
+<div id="toastWrap" class="toast-wrap"></div>
 
 <script>
 let cameras = [];
 let go2rtcStreams = [];
+let selectedCameraId = null;
 
 const isFakePath = (value) => (value || '').toLowerCase().startsWith('c:\\fakepath');
 
@@ -181,6 +192,16 @@ function setFormFeedback(message, type='error'){
   if(!box) return;
   box.className=`form-feedback ${type}`;
   box.textContent=message||'';
+}
+
+function showToast(message, type='info'){
+  const wrap=document.getElementById('toastWrap');
+  if(!wrap) return;
+  const toast=document.createElement('div');
+  toast.className=`toast ${type}`;
+  toast.textContent=message;
+  wrap.appendChild(toast);
+  setTimeout(()=>toast.remove(), 2600);
 }
 
 function isValidIp(ip){
@@ -379,10 +400,36 @@ function renderStreamStatus(cam){
   return `${fmt('visible.main',v.main)}<br/>${fmt('visible.sub',v.sub)}<br/>${fmt('thermal.main',t.main)}<br/>${fmt('thermal.sub',t.sub)}`;
 }
 
+function previewAvailability(cam){
+  const webrtc=cam.urls?.webrtc_url;
+  const rtsp=cam.urls?.rtsp_url;
+  if(webrtc || rtsp) return 'disponível';
+  return 'indisponível';
+}
+
+function renderDvrBlock(cam){
+  const streamName=cam.stream_name||'sem-stream';
+  const rtsp=cam.urls?.rtsp_url||`rtsp://localhost:8554/${streamName}`;
+  return `📋 Usar no DVR/iVMS:<br/>Protocolo: RTSP<br/>IP: localhost<br/>Porta: 8554<br/>URL: ${escapeHtml(rtsp)}<br/>Canal sugerido: 1<br/>Buffer: Tempo real`;
+}
+
 function renderList(){
-  const c=document.getElementById('camerasList'); document.getElementById('camCount').innerHTML=cameras.length;
-  if(!cameras.length){c.innerHTML='<div class="loading">Nenhuma câmera cadastrada</div>'; return;}
-  c.innerHTML=cameras.map(cam=>`<div class="cam-item"><div class="cam-info"><div class="cam-name">${escapeHtml(cam.name)}</div><div class="cam-details">UUID: ${cam.uuid}<br/>stream_count: ${cam.stream_count||0}<br/>RTSP principal: ${escapeHtml(cam.urls?.rtsp_url||'n/d')}<br/>Status principal: ${formatStatusLabel(cam.status_label)}<br/>${renderStreamStatus(cam)}</div></div><div class="cam-actions">${cam.source_type==='file'?'':`<button class="btn btn-sm" title="Reenvia a configuração para o go2rtc (não abre vídeo na UI)." onclick="publishCameraStreams('${cam.uuid}')">📡 Re-publicar go2rtc</button>`}<button class="btn btn-sm" onclick="testStream('${cam.uuid}')">${cam.source_type==='file'?'📂 Abrir vídeo':'📋 Copiar RTSP (VLC)'}</button><button class="btn btn-sm btn-danger" onclick="deleteCamera('${cam.uuid}')">🗑️</button></div></div>`).join('');
+  const c=document.getElementById('camerasList');
+  const onlineOnly=document.getElementById('showOnlineOnly')?.checked;
+  const list=onlineOnly?cameras.filter(cam=>cam.status_label==='online'):cameras;
+  document.getElementById('camCount').innerHTML=list.length;
+  if(!list.length){c.innerHTML='<div class="loading">Nenhuma câmera cadastrada</div>'; return;}
+  c.innerHTML=list.map(cam=>`<div class="cam-item ${selectedCameraId===cam.uuid?'selected':''}" onclick="selectCamera('${cam.uuid}')"><div class="cam-info"><div class="cam-name">${escapeHtml(cam.name)}</div><div class="cam-details">UUID: ${cam.uuid}<br/>stream_count: ${cam.stream_count||0}<br/>RTSP principal: ${escapeHtml(cam.urls?.rtsp_url||'n/d')}<br/>Status principal: ${formatStatusLabel(cam.status_label)}<br/>Preview: ${previewAvailability(cam)==='disponível'?'🟢 Online':'🔴 Offline'}<br/>${previewAvailability(cam)==='disponível'?'':'Pré-visualização indisponível<br/>'}${renderStreamStatus(cam)}<br/><br/>${renderDvrBlock(cam)}</div></div><div class="cam-actions" onclick="event.stopPropagation()">${cam.source_type==='file'?'':`<button class="btn btn-sm" title="Reenvia a configuração para o go2rtc (não abre vídeo na UI)." onclick="publishCameraStreams('${cam.uuid}')">📡 Re-publicar go2rtc</button>`}<button class="btn btn-sm" onclick="openPreview('${cam.uuid}')">👁 Visualizar</button><button class="btn btn-sm" onclick="testStream('${cam.uuid}')">${cam.source_type==='file'?'📂 Abrir vídeo':'📋 Abrir no VLC'}</button><button class="btn btn-sm" onclick="editCamera('${cam.uuid}')">✏️ Editar</button><button class="btn btn-sm btn-danger" onclick="deleteCamera('${cam.uuid}')">🗑️</button></div></div>`).join('');
+}
+
+function selectCamera(uuid){
+  selectedCameraId=uuid;
+  renderList();
+}
+
+function onOnlineFilterChange(){
+  renderList();
+  showToast('Filtro aplicado', 'info');
 }
 
 async function saveCamera(){
@@ -501,17 +548,69 @@ async function testStream(uuid){
   alert('Sem RTSP disponível para esta câmera.');
 }
 
+function openPreview(uuid){
+  const cam=cameras.find(c=>c.uuid===uuid);
+  if(!cam){showToast('Câmera não encontrada', 'error'); return;}
+  const apiStreams=cam.urls?.api_streams_url||'';
+  const streamName=cam.stream_name||'';
+  if(apiStreams && streamName){
+    const base=apiStreams.replace('/api/streams','');
+    window.open(`${base}/?src=${encodeURIComponent(streamName)}`,'_blank');
+    showToast('Abrindo no player', 'info');
+    return;
+  }
+  if(cam.urls?.rtsp_url){
+    showToast('Preview disponível no VLC (RTSP)', 'info');
+    window.open(cam.urls.rtsp_url,'_blank');
+    return;
+  }
+  showToast('Pré-visualização indisponível', 'error');
+}
+
 async function publishCameraStreams(uuid){
   try{
     const res=await fetch(`/cameras/${uuid}/publish`,{method:'POST'});
     const data=await res.json().catch(()=>({}));
     if(!res.ok) throw new Error(data.detail||'Falha ao publicar no go2rtc.');
     const failed=Array.isArray(data.go2rtc_provisioning?.results) && data.go2rtc_provisioning.results.some(item=>item.ok===false);
-    if(failed) setFormFeedback('Publicação parcial: alguns streams não foram publicados no go2rtc.','error');
-    else setFormFeedback('Streams publicados no go2rtc com sucesso.','success');
+    if(failed){ setFormFeedback('Publicação parcial: alguns streams não foram publicados no go2rtc.','error'); showToast('Publicação parcial', 'error');}
+    else { setFormFeedback('Streams publicados no go2rtc com sucesso.','success'); showToast('Preview disponível', 'success');}
     await loadCameras();
   }catch(err){
     setFormFeedback(err.message||'Erro ao publicar streams no go2rtc.','error');
+    showToast('Erro ao publicar streams', 'error');
+  }
+}
+
+async function editCamera(uuid){
+  const cam=cameras.find(c=>c.uuid===uuid);
+  if(!cam) return showToast('Câmera não encontrada', 'error');
+  const newName=prompt('Nome da câmera:', cam.name||'');
+  if(newName===null) return;
+  let newSourceUrl=cam.source_url||'';
+  if(cam.source_type!=='file'){
+    const entered=prompt('source_url principal (opcional):', cam.source_url||'');
+    if(entered===null) return;
+    newSourceUrl=entered.trim()||newSourceUrl;
+  }
+
+  const payload={...cam,name:newName.trim()||cam.name,source_url:newSourceUrl,streams:cam.streams};
+  if(payload.streams?.visible?.main && cam.source_type!=='file'){
+    payload.streams.visible.main.source_url=newSourceUrl;
+  }
+  delete payload.urls; delete payload.status_label; delete payload.go2rtc; delete payload.go2rtc_registered;
+  try{
+    const del=await fetch(`/cameras/${uuid}`,{method:'DELETE'});
+    if(!del.ok) throw new Error('Falha ao remover registro antigo para atualizar.');
+    const res=await fetch('/cameras/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.detail||'Falha ao atualizar câmera.');
+    await loadCameras();
+    showToast('Câmera atualizada', 'success');
+    setFormFeedback('Câmera atualizada.','success');
+  }catch(err){
+    showToast(err.message||'Erro ao atualizar câmera', 'error');
+    setFormFeedback(err.message||'Erro ao atualizar câmera.','error');
   }
 }
 
