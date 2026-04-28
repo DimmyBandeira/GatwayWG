@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import shlex
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -14,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
+from config import GO2RTC_RTSP_PORT
 from integrations.go2rtc_client import Go2RTCClient
 from services.camera_normalizer import normalize_stream_node, payload_has_fakepath, sanitize_plugins
 from services.capture_engine import CaptureEngine
@@ -256,18 +258,10 @@ def _run_provision_retry_worker() -> None:
 
 
 def _provision_camera_streams(camera: Dict[str, Any], schedule_retry: bool = True) -> Dict[str, Any]:
-    source_type = str(camera.get("source_type") or "").lower()
-    if source_type == "file":
-        return {
-            "attempted": False,
-            "reason": "source_type_file",
-            "results": [],
-        }
-
     results: List[Dict[str, Any]] = []
     for stream in _iter_camera_streams(camera):
         stream_name = str(stream.get("stream_name") or "").strip()
-        source_url = str(stream.get("source_url") or "").strip()
+        source_url = _build_go2rtc_source(camera, stream)
         if not stream_name or not source_url:
             continue
 
@@ -296,19 +290,49 @@ def _provision_camera_streams(camera: Dict[str, Any], schedule_retry: bool = Tru
     }
 
 
+def _build_go2rtc_source(camera: Dict[str, Any], stream: Dict[str, Any]) -> str:
+    raw_source = str(stream.get("source_url") or "").strip()
+    if not raw_source:
+        return ""
+
+    source_type = str(camera.get("source_type") or "").lower()
+    if source_type != "file":
+        return raw_source
+
+    if raw_source.startswith("exec:"):
+        command = raw_source
+        if "{output}" not in command and "-f rtsp" in command:
+            command = command.replace("rtsp://localhost:8554/" + str(stream.get("stream_name") or "").strip(), "{output}")
+            if command.endswith("rtsp://localhost:8554"):
+                command = f"{command}/{{output}}"
+            parts = command.rsplit(" ", 1)
+            if len(parts) == 2 and parts[1].startswith("rtsp://"):
+                command = f"{parts[0]} {{output}}"
+        if "{output}" not in command:
+            command = f"{command} {{output}}"
+        if "-f rtsp" in command and "-rtsp_transport" not in command:
+            command = command.replace("-f rtsp", "-rtsp_transport tcp -f rtsp")
+        return command
+
+    safe_source = shlex.quote(raw_source)
+    return f"exec:ffmpeg -re -stream_loop -1 -i {safe_source} -c copy -rtsp_transport tcp -f rtsp {{output}}"
+
+
 def _provision_camera_uuid_alias(camera: Dict[str, Any], schedule_retry: bool = True) -> Dict[str, Any]:
     camera_uuid = str(camera.get("uuid") or "").strip()
     if not camera_uuid:
         return {"attempted": False, "action": "skipped_missing_uuid"}
 
-    source_type = str(camera.get("source_type") or "").lower()
-    if source_type == "file":
-        return {"attempted": False, "action": "skipped_source_type_file"}
-
     for stream in _iter_camera_streams(camera):
-        source_url = str(stream.get("source_url") or "").strip()
-        if not source_url:
+        upstream_stream_name = str(stream.get("stream_name") or "").strip()
+        if not upstream_stream_name:
             continue
+
+        source_url = (
+            f"rtsp://127.0.0.1:{GO2RTC_RTSP_PORT}/{upstream_stream_name}"
+            if upstream_stream_name != camera_uuid
+            else _build_go2rtc_source(camera, stream)
+        )
 
         result = go2rtc_client.upsert_stream(camera_uuid, source_url)
         if schedule_retry and not result.get("ok"):
@@ -626,10 +650,11 @@ def go2rtc_discovery_onvif_scan(
 @app.get("/sync/status")
 def sync_status() -> Dict[str, Any]:
     logger.info("sync_status_requested")
-    registered_cameras = registry_service.list_cameras()
+    raw_registered_cameras = registry_service.list_cameras()
     snapshot = go2rtc_client.get_streams_snapshot()
     go2rtc_online = bool(snapshot["online"])
     streams_index = snapshot["streams"]
+    registered_cameras = [_enrich_camera(camera, go2rtc_online, streams_index) for camera in raw_registered_cameras]
 
     go2rtc_streams = (
         [{"stream_name": stream_name, **(details or {})} for stream_name, details in streams_index.items()]
@@ -638,7 +663,7 @@ def sync_status() -> Dict[str, Any]:
     )
 
     matched, missing_in_go2rtc, not_imported = _resolve_sync_sets(
-        registered_cameras,
+        raw_registered_cameras,
         go2rtc_online,
         streams_index,
     )
