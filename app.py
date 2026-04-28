@@ -296,12 +296,49 @@ def _provision_camera_streams(camera: Dict[str, Any], schedule_retry: bool = Tru
     }
 
 
+def _provision_camera_uuid_alias(camera: Dict[str, Any], schedule_retry: bool = True) -> Dict[str, Any]:
+    camera_uuid = str(camera.get("uuid") or "").strip()
+    if not camera_uuid:
+        return {"attempted": False, "action": "skipped_missing_uuid"}
+
+    source_type = str(camera.get("source_type") or "").lower()
+    if source_type == "file":
+        return {"attempted": False, "action": "skipped_source_type_file"}
+
+    for stream in _iter_camera_streams(camera):
+        source_url = str(stream.get("source_url") or "").strip()
+        if not source_url:
+            continue
+
+        result = go2rtc_client.upsert_stream(camera_uuid, source_url)
+        if schedule_retry and not result.get("ok"):
+            _schedule_provision_retry(
+                camera_uuid=camera_uuid,
+                modality="canonical",
+                profile="uuid",
+                stream_name=camera_uuid,
+                source_url=source_url,
+                attempt=1,
+                error=str(result.get("error") or ""),
+            )
+        return {
+            "attempted": True,
+            "stream_name": camera_uuid,
+            "source": {"modality": stream.get("modality"), "profile": stream.get("profile")},
+            **result,
+        }
+
+    return {"attempted": False, "action": "skipped_missing_source_url"}
+
+
 @app.on_event("startup")
 def startup_event() -> None:
     global provision_retry_thread
     provision_retry_stop.clear()
     provision_retry_thread = threading.Thread(target=_run_provision_retry_worker, daemon=True, name="go2rtc-provision-retry")
     provision_retry_thread.start()
+    for camera in registry_service.list_cameras():
+        _provision_camera_uuid_alias(camera, schedule_retry=True)
 
 
 @app.on_event("shutdown")
@@ -347,10 +384,13 @@ def _enrich_stream_node(
         return None
 
     stream_name = node.get("stream_name")
+    source_url = node.get("source_url", "")
+    source_url_masked = go2rtc_client.mask_url(str(source_url))
+
     if not stream_name:
         return {
             "stream_name": None,
-            "source_url": node.get("source_url", ""),
+            "source_url": source_url_masked,
             "urls": None,
             "go2rtc_registered": False,
             "status_label": "not_published" if go2rtc_online else "go2rtc_offline",
@@ -366,7 +406,7 @@ def _enrich_stream_node(
 
     return {
         "stream_name": stream_name,
-        "source_url": node.get("source_url", ""),
+        "source_url": source_url_masked,
         "urls": go2rtc_client.build_stream_urls(stream_name),
         "go2rtc_registered": go2rtc_registered,
         "status_label": status_label,
@@ -413,6 +453,24 @@ def _enrich_camera(camera: Dict[str, Any], go2rtc_online: bool, streams_index: D
     payload["go2rtc"] = {
         "registered": payload["go2rtc_registered"],
         "status": payload["status_label"],
+    }
+    camera_uuid = str(payload.get("uuid") or "").strip()
+    payload["canonical_urls"] = (
+        {
+            **go2rtc_client.build_stream_urls(camera_uuid),
+            "mjpeg_url": f"/stream/{camera_uuid}",
+        }
+        if camera_uuid
+        else None
+    )
+    payload["canonical_status"] = {
+        "camera_uuid": camera_uuid,
+        "go2rtc_registered": bool(go2rtc_online and camera_uuid and camera_uuid in streams_index),
+        "status_label": (
+            "go2rtc_offline"
+            if not go2rtc_online
+            else ("online" if camera_uuid in streams_index else "not_published")
+        ),
     }
 
     return payload
@@ -694,6 +752,7 @@ def add_camera(payload: CameraPayload) -> Dict[str, Any]:
         raise HTTPException(status_code=status, detail=msg) from exc
 
     provisioning = _provision_camera_streams(normalized_camera)
+    canonical_provisioning = _provision_camera_uuid_alias(normalized_camera, schedule_retry=True)
 
     snapshot = go2rtc_client.get_streams_snapshot()
     enriched = _enrich_camera(normalized_camera, bool(snapshot["online"]), snapshot["streams"])
@@ -710,6 +769,7 @@ def add_camera(payload: CameraPayload) -> Dict[str, Any]:
         "camera": enriched,
         "observation": observation,
         "go2rtc_provisioning": provisioning,
+        "canonical_uuid_provisioning": canonical_provisioning,
     }
 
 
@@ -720,6 +780,7 @@ def publish_camera_streams(uuid: str) -> Dict[str, Any]:
         raise HTTPException(status_code=404, detail="Câmera não encontrada")
 
     provisioning = _provision_camera_streams(camera, schedule_retry=True)
+    canonical_provisioning = _provision_camera_uuid_alias(camera, schedule_retry=True)
     snapshot = go2rtc_client.get_streams_snapshot()
     enriched = _enrich_camera(camera, bool(snapshot["online"]), snapshot["streams"])
 
@@ -727,6 +788,26 @@ def publish_camera_streams(uuid: str) -> Dict[str, Any]:
         "status": "success",
         "camera": enriched,
         "go2rtc_provisioning": provisioning,
+        "canonical_uuid_provisioning": canonical_provisioning,
+    }
+
+
+@app.get("/cameras/{uuid}/urls")
+def get_camera_urls(uuid: str) -> Dict[str, Any]:
+    camera = registry_service.get_camera(uuid)
+    if not camera:
+        raise HTTPException(status_code=404, detail="Câmera não encontrada")
+
+    snapshot = go2rtc_client.get_streams_snapshot()
+    go2rtc_online = bool(snapshot["online"])
+    streams_index = snapshot["streams"]
+    enriched = _enrich_camera(camera, go2rtc_online, streams_index)
+
+    return {
+        "uuid": uuid,
+        "canonical_urls": enriched.get("canonical_urls"),
+        "canonical_status": enriched.get("canonical_status"),
+        "streams": enriched.get("streams"),
     }
 
 
