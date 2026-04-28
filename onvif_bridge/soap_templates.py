@@ -42,6 +42,48 @@ def build_get_capabilities(device: BridgeDevice, cfg: BridgeConfig) -> str:
     )
 
 
+def build_get_system_date_and_time() -> str:
+    return soap_envelope(
+        "<tds:GetSystemDateAndTimeResponse><tds:SystemDateAndTime>"
+        "<tt:DateTimeType>NTP</tt:DateTimeType>"
+        "<tt:DaylightSavings>false</tt:DaylightSavings>"
+        "<tt:TimeZone><tt:TZ>UTC</tt:TZ></tt:TimeZone>"
+        "<tt:UTCDateTime><tt:Time><tt:Hour>0</tt:Hour><tt:Minute>0</tt:Minute><tt:Second>0</tt:Second></tt:Time>"
+        "<tt:Date><tt:Year>2026</tt:Year><tt:Month>1</tt:Month><tt:Day>1</tt:Day></tt:Date></tt:UTCDateTime>"
+        "</tds:SystemDateAndTime></tds:GetSystemDateAndTimeResponse>"
+    )
+
+
+def build_get_hostname(device: BridgeDevice) -> str:
+    return soap_envelope(
+        "<tds:GetHostnameResponse><tds:HostnameInformation>"
+        f"<tt:Name>{device.name}</tt:Name>"
+        "<tt:FromDHCP>false</tt:FromDHCP>"
+        "</tds:HostnameInformation></tds:GetHostnameResponse>"
+    )
+
+
+def build_get_network_interfaces(device: BridgeDevice) -> str:
+    return soap_envelope(
+        "<tds:GetNetworkInterfacesResponse><tds:NetworkInterfaces token=\"eth0\">"
+        "<tt:Enabled>true</tt:Enabled>"
+        "<tt:Info><tt:Name>eth0</tt:Name><tt:HwAddress>00:00:00:00:00:00</tt:HwAddress><tt:MTU>1500</tt:MTU></tt:Info>"
+        "<tt:IPv4><tt:Enabled>true</tt:Enabled><tt:Config>"
+        f"<tt:Manual><tt:Address>{device.virtual_ip}</tt:Address><tt:PrefixLength>24</tt:PrefixLength></tt:Manual>"
+        "</tt:Config></tt:IPv4>"
+        "</tds:NetworkInterfaces></tds:GetNetworkInterfacesResponse>"
+    )
+
+
+def build_get_scopes() -> str:
+    return soap_envelope(
+        "<tds:GetScopesResponse>"
+        "<tds:Scopes><tt:ScopeDef>Fixed</tt:ScopeDef><tt:ScopeItem>onvif://www.onvif.org/type/video_encoder</tt:ScopeItem></tds:Scopes>"
+        "<tds:Scopes><tt:ScopeDef>Fixed</tt:ScopeDef><tt:ScopeItem>onvif://www.onvif.org/hardware/Virtual_ONVIF_Camera</tt:ScopeItem></tds:Scopes>"
+        "</tds:GetScopesResponse>"
+    )
+
+
 def build_get_services(device: BridgeDevice, cfg: BridgeConfig) -> str:
     device_xaddr = f"http://{device.virtual_ip}:{cfg.http_port}/onvif/device_service"
     media_xaddr = f"http://{device.virtual_ip}:{cfg.http_port}/onvif/media_service"
@@ -84,6 +126,21 @@ def build_get_video_sources() -> str:
         "<tt:Resolution><tt:Width>1280</tt:Width><tt:Height>720</tt:Height></tt:Resolution>"
         "</trt:VideoSources>"
         "</trt:GetVideoSourcesResponse>"
+    )
+
+
+def build_get_video_encoder_configurations() -> str:
+    return soap_envelope(
+        "<trt:GetVideoEncoderConfigurationsResponse>"
+        "<trt:Configurations token=\"VideoEncCfg_1\">"
+        "<tt:Name>VideoEncoderConfig</tt:Name>"
+        "<tt:UseCount>1</tt:UseCount>"
+        "<tt:Encoding>H264</tt:Encoding>"
+        "<tt:Resolution><tt:Width>1280</tt:Width><tt:Height>720</tt:Height></tt:Resolution>"
+        "<tt:Quality>5</tt:Quality>"
+        "<tt:RateControl><tt:FrameRateLimit>15</tt:FrameRateLimit><tt:BitrateLimit>2048</tt:BitrateLimit></tt:RateControl>"
+        "</trt:Configurations>"
+        "</trt:GetVideoEncoderConfigurationsResponse>"
     )
 
 

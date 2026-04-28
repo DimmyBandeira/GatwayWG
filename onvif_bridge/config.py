@@ -27,6 +27,7 @@ class BridgeConfig:
     http_port: int
     auth_user: str
     auth_pass: str
+    auth_mode: str
     devices: list[BridgeDevice]
 
     def get_device_by_virtual_ip(self, virtual_ip: str) -> BridgeDevice | None:
@@ -87,6 +88,9 @@ def load_config(config_path: str | None = None) -> BridgeConfig:
     http_port = _require_int(payload, "http_port", "root")
     auth_user = _require_str(payload, "auth_user", "root")
     auth_pass = _require_str(payload, "auth_pass", "root")
+    auth_mode = str(payload.get("auth_mode", "basic")).strip().lower()
+    if auth_mode not in {"basic", "none"}:
+        raise BridgeConfigError("Campo inválido: root.auth_mode (use 'basic' ou 'none')")
 
     raw_devices = payload.get("devices")
     if not isinstance(raw_devices, list) or not raw_devices:
@@ -113,5 +117,6 @@ def load_config(config_path: str | None = None) -> BridgeConfig:
         http_port=http_port,
         auth_user=auth_user,
         auth_pass=auth_pass,
+        auth_mode=auth_mode,
         devices=devices,
     )

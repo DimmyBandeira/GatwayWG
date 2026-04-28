@@ -13,5 +13,6 @@
       "model": "Virtual ONVIF Camera",
       "profile_token": "Profile_1"
     }
-  ]
+  ],
+  "auth_mode": "basic"
 }

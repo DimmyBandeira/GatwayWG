@@ -22,6 +22,7 @@ Este módulo cria um **serviço ONVIF isolado** para compatibilidade com DVR (ex
    - `gateway_ip`
    - `rtsp_port` (8554)
    - `http_port` (8080 no PoC)
+   - `auth_mode` (`none` para teste inicial local ou `basic` para validação com credencial)
    - `auth_user` / `auth_pass`
    - `devices[]` com `virtual_ip` -> `camera_uuid`
 
@@ -61,14 +62,18 @@ sudo ip addr add 192.168.10.201/24 dev eth0
 
 ## Cadastro no DVR Intelbras
 
+- Primeiro teste recomendado: usar `auth_mode: "none"` para validar conectividade ONVIF básica.
+- Depois de confirmar descoberta, trocar para `auth_mode: "basic"` para validar credenciais.
 - Protocolo: **ONVIF**
 - IP: `<virtual_ip>`
-- Porta HTTP: `8080` (PoC)
+- Porta HTTP: **porta do bridge** (inicialmente `8080`)
 - Porta RTSP: `8554` (ou auto-adaptativo)
 - Usuário: `auth_user`
 - Senha: `auth_pass`
 - Canal remoto: `1`
 - Tipo de servidor: `TCP`
+
+Se `8080` falhar por restrição do DVR/ambiente, teste porta `80` com privilégios adequados no host.
 
 ## Nota sobre porta 80
 
