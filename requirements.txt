@@ -1,0 +1,15 @@
+# Gateway API
+fastapi>=0.111,<1.0
+uvicorn[standard]>=0.30,<1.0
+pydantic>=2.7,<3.0
+
+# HTTP integration (go2rtc)
+requests>=2.32,<3.0
+
+# Video fallback stack (legacy/debug)
+opencv-python>=4.10,<5.0
+av>=12.0,<13.0
+decord>=0.6,<1.0
+
+# Upload support for multipart/form-data
+python-multipart>=0.0.9,<1.0

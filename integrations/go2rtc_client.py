@@ -1,52 +1,231 @@
-# go2rtc_client.py: Middleware de streaming (WebRTC/RTSP) 
-# integrations/go2rtc_client.py
-import requests
-import logging
+"""Cliente de integração com API do go2rtc."""
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("Go2RTC_Client")
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict, List, Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+import requests
+
+from config import (
+    GO2RTC_API_BASE_URL,
+    GO2RTC_RTSP_HOST,
+    GO2RTC_RTSP_PORT,
+    GO2RTC_WEBRTC_HOST,
+    GO2RTC_WEBRTC_PORT,
+)
+
+logger = logging.getLogger("Go2RTCClient")
+
 
 class Go2RTCClient:
-    """
-    Cliente para consumir a API REST nativa do go2rtc.
-    Atua como a ponte entre o Gateway (Python) e o Middleware (C/Go).
-    """
-    def __init__(self, base_url: str = "http://localhost:1984"):
-        self.base_url = base_url
+    """Ponte entre o Gateway Python e o middleware go2rtc."""
 
-    def get_active_streams(self):
-        """
-        Consulta o go2rtc para listar todas as câmeras (RTSP/ONVIF/Emuladas)
-        que estão atualmente online e configuradas no go2rtc.yaml.
-        """
+    def __init__(
+        self,
+        base_url: str = GO2RTC_API_BASE_URL,
+        rtsp_host: str = GO2RTC_RTSP_HOST,
+        rtsp_port: int = GO2RTC_RTSP_PORT,
+        webrtc_host: str = GO2RTC_WEBRTC_HOST,
+        webrtc_port: int = GO2RTC_WEBRTC_PORT,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.rtsp_host = rtsp_host
+        self.rtsp_port = rtsp_port
+        self.webrtc_host = webrtc_host
+        self.webrtc_port = webrtc_port
+
+    def healthcheck(self) -> Dict[str, Any]:
         try:
-            url = f"{self.base_url}/api/streams"
-            response = requests.get(url, timeout=5)
+            response = requests.get(f"{self.base_url}/api/streams", timeout=3)
             response.raise_for_status()
-            
-            # O go2rtc retorna um dicionário onde a chave é o nome da câmera
-            streams_data = response.json()
-            
-            active_cameras = []
-            for stream_name, details in streams_data.items():
-                active_cameras.append({
-                    "name": stream_name,
-                    "producers": details.get("producers", []),
-                    "webrtc_url": f"ws://localhost:8555/api/ws?src={stream_name}",
-                    "rtsp_url": f"rtsp://localhost:8554/{stream_name}"
-                })
-                
-            logger.info(f"Encontradas {len(active_cameras)} câmeras ativas no go2rtc.")
-            return active_cameras
-            
-        except requests.RequestException as e:
-            logger.error(f"Falha ao conectar na API do go2rtc: {e}")
+            return {"online": True, "api_base_url": self.base_url}
+        except requests.RequestException as exc:
+            logger.warning("go2rtc offline/inacessível: %s", exc)
+            return {"online": False, "api_base_url": self.base_url, "error": str(exc)}
+
+    def get_active_streams(self) -> List[Dict[str, Any]]:
+        """Lista streams ativos sem derrubar a aplicação em caso de falha."""
+        streams_data = self._fetch_streams()
+        if not streams_data:
             return []
 
-# --- Teste isolado do módulo ---
-if __name__ == "__main__":
-    client = Go2RTCClient()
-    cameras = client.get_active_streams()
-    print("Câmeras disponíveis para o WebGuardião:")
-    for cam in cameras:
-        print(f"- {cam['name']} (RTSP: {cam['rtsp_url']})")
+        active_cameras: List[Dict[str, Any]] = []
+        for stream_name, details in streams_data.items():
+            urls = self.build_stream_urls(stream_name)
+            active_cameras.append(
+                {
+                    "name": stream_name,
+                    "producers": details.get("producers", []),
+                    "consumers": details.get("consumers", []),
+                    "rtsp_url": urls["rtsp_url"],
+                    "webrtc_url": urls["webrtc_url"],
+                    "api_streams_url": urls["api_streams_url"],
+                }
+            )
+
+        logger.info("go2rtc retornou %s stream(s) ativo(s)", len(active_cameras))
+        return active_cameras
+
+    def get_streams_index(self) -> Dict[str, Dict[str, Any]]:
+        return self._fetch_streams() or {}
+
+    def get_streams_snapshot(self) -> Dict[str, Any]:
+        streams = self._fetch_streams()
+        if streams is None:
+            return {"online": False, "streams": {}}
+        return {"online": True, "streams": streams}
+
+    def discover_onvif(self, src: str | None = None, timeout_seconds: float | None = None) -> Dict[str, Any]:
+        params: Dict[str, str] = {}
+        if src:
+            params["src"] = src
+
+        timeout_seconds = timeout_seconds if timeout_seconds is not None else (10 if src else 20)
+
+        try:
+            response = requests.get(f"{self.base_url}/api/onvif", params=params, timeout=timeout_seconds)
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict):
+                logger.warning("Resposta inesperada do go2rtc /api/onvif: %s", type(payload).__name__)
+                return {"online": True, "success": True, "streams": []}
+
+            streams = payload.get("streams")
+            if not isinstance(streams, list):
+                streams = []
+
+            return {
+                "online": True,
+                "success": True,
+                "streams": streams,
+                "raw": payload,
+            }
+        except requests.Timeout:
+            safe_src = self._mask_url(src) if src else None
+            logger.warning("Timeout no discovery ONVIF go2rtc src=%s", safe_src)
+            return {
+                "online": False,
+                "success": False,
+                "timeout": True,
+                "message": "Discovery ONVIF demorou demais. Use busca por IP.",
+                "hint": "onvif://user:pass@ip:porta",
+                "streams": [],
+                "raw": {},
+            }
+        except requests.RequestException as exc:
+            safe_src = self._mask_url(src) if src else None
+            logger.warning("Falha no discovery ONVIF go2rtc src=%s error=%s", safe_src, exc)
+            return {
+                "online": False,
+                "success": False,
+                "streams": [],
+                "raw": {},
+                "error": str(exc),
+            }
+
+    def build_stream_urls(self, stream_name: str) -> Dict[str, str]:
+        safe_name = stream_name.strip()
+        return {
+            "rtsp_url": f"rtsp://{self.rtsp_host}:{self.rtsp_port}/{safe_name}",
+            "api_streams_url": f"{self.base_url}/api/streams",
+            "webrtc_url": f"ws://{self.webrtc_host}:{self.webrtc_port}/api/ws?src={safe_name}",
+        }
+
+    def upsert_stream(self, name: str, source_url: str) -> Dict[str, Any]:
+        stream_name = (name or "").strip()
+        src = (source_url or "").strip()
+        masked_src = self._mask_url(src) if src else ""
+
+        if not stream_name or not src:
+            return {
+                "ok": False,
+                "stream_name": stream_name,
+                "source_url_masked": masked_src,
+                "action": "skipped_invalid_input",
+                "error": "stream_name e source_url são obrigatórios",
+            }
+
+        params = {"name": stream_name, "src": src}
+        for method in ("PUT", "PATCH"):
+            try:
+                response = requests.request(
+                    method,
+                    f"{self.base_url}/api/streams",
+                    params=params,
+                    timeout=6,
+                )
+                response.raise_for_status()
+                logger.info("Stream provisionado no go2rtc: name=%s src=%s method=%s", stream_name, masked_src, method)
+                return {
+                    "ok": True,
+                    "stream_name": stream_name,
+                    "source_url_masked": masked_src,
+                    "action": "created_or_updated",
+                }
+            except requests.RequestException as exc:
+                status_code = getattr(exc.response, "status_code", None)
+                if status_code in {404, 405} and method == "PUT":
+                    continue
+                logger.warning(
+                    "Falha ao provisionar stream no go2rtc: name=%s src=%s method=%s error=%s",
+                    stream_name,
+                    masked_src,
+                    method,
+                    exc,
+                )
+                return {
+                    "ok": False,
+                    "stream_name": stream_name,
+                    "source_url_masked": masked_src,
+                    "action": "failed",
+                    "error": str(exc),
+                }
+
+        return {
+            "ok": False,
+            "stream_name": stream_name,
+            "source_url_masked": masked_src,
+            "action": "failed",
+            "error": "Métodos PUT/PATCH não suportados pelo go2rtc",
+        }
+
+    def _fetch_streams(self) -> Optional[Dict[str, Dict[str, Any]]]:
+        try:
+            response = requests.get(f"{self.base_url}/api/streams", timeout=5)
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict):
+                logger.warning("Resposta inesperada do go2rtc /api/streams: %s", type(payload).__name__)
+                return {}
+            return payload
+        except requests.RequestException as exc:
+            logger.warning("Falha ao listar streams no go2rtc: %s", exc)
+            return None
+
+    @staticmethod
+    def _mask_url(url: str) -> str:
+        if not url:
+            return url
+        try:
+            parts = urlsplit(url)
+            hostname = parts.hostname or ""
+            username = parts.username or ""
+            port = f":{parts.port}" if parts.port else ""
+
+            if username:
+                netloc = f"{username}:***@{hostname}{port}"
+            else:
+                netloc = f"{hostname}{port}"
+
+            query_items = []
+            for key, value in parse_qsl(parts.query, keep_blank_values=True):
+                if "pass" in key.lower() or "pwd" in key.lower() or "senha" in key.lower():
+                    query_items.append((key, "***"))
+                else:
+                    query_items.append((key, value))
+
+            return urlunsplit((parts.scheme, netloc, parts.path, urlencode(query_items), parts.fragment))
+        except Exception:
+            return "***"

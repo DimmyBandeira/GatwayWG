@@ -1,77 +1,127 @@
-# Arquitetura Técnica do Gateway
+# Arquitetura Técnica — GatwayWG
 
-## 1. Visão Geral (Decoupled Middleware)
-O Gateway atua como uma camada de isolamento entre o hardware físico e a lógica de negócio do WebGuardião. Ele é responsável por garantir que o processamento pesado de vídeo aconteça de forma otimizada antes de chegar à interface ou ao banco de dados.
+## 1. Diretriz arquitetural
 
-## 2. Fluxo de Processamento em Lote (Batching)
-Para maximizar a eficiência da GPU (NVIDIA), o sistema não processa câmeras isoladamente:
-1. Os `Workers` capturam frames de múltiplas câmeras.
-2. O `batch_manager.py` agrupa esses frames em um único tensor.
-3. A inferência YOLO/DeepStream é executada uma única vez para o lote inteiro.
-4. Os resultados são distribuídos via `event_bus.py`.
+O GatwayWG é um **Gateway de Vídeo** baseado em **go2rtc**.
 
-## 3. Topologia de Vídeo (Monitores Virtuais)
-O recurso de **VideoWall** permite que o Gateway crie um stream composto (mosaico):
-- **Entrada**: 16 streams RTSP independentes.
-- **Processamento**: `virtual_display.py` monta uma grade 4x4.
-- **Saída**: 1 stream de alta resolução para o VideoWall ou para a IA analisar simultaneamente.
+Nesta fase, o GatwayWG **não executa IA**. A execução de IA permanece no **WebGuardião**, que consome os streams RTSP disponibilizados pelo gateway.
 
-## 4. Sistema de Plugins
-A extensibilidade é garantida por uma classe abstrata em `base_plugin.py`. Qualquer novo recurso deve implementar os métodos:
-- `on_frame_received()`: Para análise em tempo real.
-- `on_event_triggered()`: Para comunicação com o dispatcher de alertas.
+## 2. Escopo funcional atual
 
-## 5. Escalabilidade (Cluster Mode)
-O sistema pode operar em dois modos:
-- **Standalone**: Ideal para clínicas pequenas ou servidores únicos.
-- **Cluster**: O `master_node` gerencia o balanceamento de carga entre vários `workers` em rede.
+### 2.1 Entradas suportadas
 
-## Topologia Técnica do Gateway
+- RTSP (câmeras IP)
+- ONVIF (descoberta e conexão)
+- USB/V4L2 via FFmpeg/go2rtc
+- Arquivo/emulação para testes controlados
 
-## 1. Fluxo de Dados e Cluster
-[cite_start]O Gateway opera como um middleware desacoplado[cite: 197]. [cite_start]O `master_node` recebe as solicitações do WebGuardião e distribui o processamento entre os `worker_nodes`[cite: 299, 300].
+### 2.2 Core
 
-## 2. Ingestão e Saída de Vídeo
-- [cite_start]**Entrada (Input)**: Ingestão multisource (IP, USB, Arquivos) via `capture_engine.py`[cite: 320].
-- [cite_start]**Processamento**: Agrupamento de frames via `batch_manager.py` para inferência rápida[cite: 296, 324].
-- [cite_start]**Saída (Output)**: Entrega WebRTC para UI e RTSP Proxy para VMS/IA externo[cite: 321, 322].
+- **go2rtc** como núcleo de ingestão, normalização, proxy e redistribuição.
 
-## 3. Resiliência
-[cite_start]Implementação de **Watchdog e Health Check** em `pipeline_manager.py` para monitorar conexões proativamente[cite: 271, 329].
+### 2.3 API de gestão
 
-## Evolução do tema
+- **FastAPI** somente para:
+  - cadastro de câmeras
+  - health checks
+  - inventário
+  - exposição de URLs por `camera_uuid`
 
-# Architecture Topology - Semantic Agent Mapping
+## 3. Contrato de integração por UUID (padrão único)
 
-<DataFlowTopology>
-  <InboundSources>
-    <Source type="IP_CAMERA">RTSP/ONVIF com Discovery+ (Informação de Hardware nativa)[cite: 94, 809].</Source>
-    <Source type="USB_WEBCAM">V4L2 nativo via go2rtc para performance industrial[cite: 10, 858].</Source>
-    <Source type="EMULATION">Arquivos .mp4 via Decord para testes de estresse em massa[cite: 96, 751].</Source>
-  </InboundSources>
+### 3.1 Identificador canônico
 
-  <InternalRouting>
-    <Endpoint id="API_MGMT" port="1984">Gestão, Monaco Editor e Discovery Automático[cite: 99, 108, 805].</Endpoint>
-    <Endpoint id="IA_RTSP" port="8554">Stream RTSP Local. Destinado ao YOLO para garantir estabilidade de conexão[cite: 73, 100].</Endpoint>
-    <Endpoint id="USER_WEBRTC" port="8555">Stream WebRTC. Ultra baixa latência para monitoramento hospitalar[cite: 68, 101, 207].</Endpoint>
-  </InternalRouting>
+- `camera_uuid` é o identificador único da câmera no GatwayWG.
+- Consumidores externos **não** devem depender de IP/canal do fabricante como chave de integração.
 
-  <ProcessLogic>
-    <IA_Stream_Specialization>
-      O sistema utiliza RTSP via Localhost para a IA, evitando decodificações WebRTC complexas no Python e garantindo reconexão automática[cite: 73, 76].
-    </IA_Stream_Specialization>
-    <User_RealTime_Specialization>
-      O usuário consome WebRTC nativo do go2rtc, garantindo latência zero no monitoramento de UTIs[cite: 68, 70].
-    </User_RealTime_Specialization>
-  </ProcessLogic>
-</DataFlowTopology>
+### 3.2 Contrato de cadastro (exemplo)
 
-<SecurityHardening>
-  [cite_start]<Feature>Local_auth para proteção da API administrativa[cite: 12, 829].</Feature>
-  [cite_start]<Feature>Allow_paths para restringir o acesso a binários e scripts do sistema[cite: 12, 829].</Feature>
-</SecurityHardening>
+**Request** (`POST /cameras/`):
 
-<FutureScaleParameters>
-  <Parameter name="batch_size" status="DORMANT" default="1" />
-  <Parameter name="cluster_node" type="Worker" status="DORMANT" />
-</FutureScaleParameters>
+```json
+{
+  "uuid": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "UTI-02-Leito-07",
+  "type": "rtsp",
+  "path": "rtsp://usuario:senha@192.168.10.20:554/Streaming/Channels/101",
+  "node": "master",
+  "pipeline": "go2rtc",
+  "videoWall": false,
+  "plugins": [],
+  "createdAt": "2026-04-25T00:00:00Z"
+}
+```
+
+**Response** (`201 Created`):
+
+```json
+{
+  "status": "success",
+  "uuid": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+### 3.3 Contrato mínimo de inventário/saúde
+
+- `GET /health` → status operacional da API de gestão.
+- `GET /cameras/` → inventário de câmeras cadastradas.
+
+### 3.4 Contrato de saída de stream por UUID
+
+- **WebGuardião (IA externa):** `rtsp://<gateway_ip>:8554/<camera_uuid>`
+- **iVMS/DVR/VMS:** `rtsp://<gateway_ip>:8554/<camera_uuid>`
+- **Operação humana (baixa latência):** WebRTC (go2rtc)
+
+### 3.5 Mapeamento mínimo de erros da API de cadastro
+
+| Operação | Código | Quando ocorre | Ação recomendada |
+|---|---|---|---|
+| `POST /cameras/` | `400 Bad Request` | Payload inválido/ausente | Corrigir campos obrigatórios e formato. |
+| `POST /cameras/` | `409 Conflict` | `camera_uuid` já cadastrado | Evitar duplicidade; atualizar registro existente. |
+| `DELETE /cameras/{uuid}` | `404 Not Found` | UUID não encontrado no inventário | Reconciliar inventário local antes de remover. |
+
+### 3.6 Convenção de nomenclatura (multi-site)
+
+#### `camera_uuid`
+
+- Deve ser estável e único globalmente (preferencialmente UUID v4).
+- Não deve codificar semântica operacional mutável (ex.: ala/leito), apenas identidade técnica.
+
+#### `name`
+
+- Formato recomendado: `<site>-<setor>-<ponto>`.
+- Exemplo: `hospital-a-uti02-leito07`.
+- Usar letras minúsculas e hífen para padronizar pesquisa, filtros e inventário.
+
+## 4. Matriz de compatibilidade de fontes (operação em campo)
+
+| Fonte | Método de entrada | Status nesta fase | Observações operacionais |
+|---|---|---|---|
+| RTSP (IP Camera) | URL RTSP direta no go2rtc | Ativo (principal) | Melhor caminho para integração imediata por UUID. |
+| ONVIF (IP Camera) | Descoberta/URL via ONVIF + go2rtc | Ativo | Útil para provisionamento e descoberta em rede local. |
+| USB/V4L2 | Dispositivo local via FFmpeg/go2rtc | Ativo | Recomendado para câmeras locais e cenários de bancada. |
+| Arquivo/Emulação | Arquivo de vídeo (loop) via FFmpeg/go2rtc | Ativo (laboratório) | Validar fluxo sem depender de hardware físico. |
+
+## 5. Componentes não prioritários nesta fase
+
+OpenCV, PyAV e Decord podem existir como fallback/laboratório, porém **não** definem o caminho principal de ingestão em produção.
+
+## 6. Itens explicitamente fora do escopo atual
+
+Os itens abaixo devem ser tratados como **roadmap**, não como comportamento ativo:
+
+- inferência IA no gateway
+- YOLO ativo
+- DeepStream ativo
+- processamento em lote (batching) ativo
+- cluster ativo para processamento distribuído
+- plugin analytics ativo
+- VideoWall/monitor virtual em operação
+
+## 7. Roadmap por fases
+
+- **Fase 1 (atual):** go2rtc + RTSP/WebRTC + cadastro/persistência.
+- **Fase 2:** integração WebGuardião por UUID.
+- **Fase 3:** entrega RTSP para iVMS/DVR/VMS.
+- **Fase 4:** VideoWall/monitor virtual.
+- **Fase 5:** DeepStream/batching, se necessário.
