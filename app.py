@@ -161,6 +161,37 @@ def _iter_camera_streams(camera: Dict[str, Any]) -> List[Dict[str, Any]]:
     return result
 
 
+def _provision_camera_streams(camera: Dict[str, Any]) -> Dict[str, Any]:
+    source_type = str(camera.get("source_type") or "").lower()
+    if source_type == "file":
+        return {
+            "attempted": False,
+            "reason": "source_type_file",
+            "results": [],
+        }
+
+    results: List[Dict[str, Any]] = []
+    for stream in _iter_camera_streams(camera):
+        stream_name = str(stream.get("stream_name") or "").strip()
+        source_url = str(stream.get("source_url") or "").strip()
+        if not stream_name or not source_url:
+            continue
+
+        upsert_result = go2rtc_client.upsert_stream(stream_name, source_url)
+        results.append(
+            {
+                "modality": stream.get("modality"),
+                "profile": stream.get("profile"),
+                **upsert_result,
+            }
+        )
+
+    return {
+        "attempted": bool(results),
+        "results": results,
+    }
+
+
 def _resolve_sync_sets(
     cameras: List[Dict[str, Any]],
     go2rtc_online: bool,
@@ -543,12 +574,23 @@ def add_camera(payload: CameraPayload) -> Dict[str, Any]:
         status = 409 if "UUID duplicado" in msg else 400
         raise HTTPException(status_code=status, detail=msg) from exc
 
+    provisioning = _provision_camera_streams(normalized_camera)
+
     snapshot = go2rtc_client.get_streams_snapshot()
     enriched = _enrich_camera(normalized_camera, bool(snapshot["online"]), snapshot["streams"])
+
+    has_provision_failure = any(not item.get("ok", False) for item in provisioning.get("results", []))
+    observation = (
+        "Cadastro persistido. Verifique status por stream em camera.streams.*"
+        if not has_provision_failure
+        else "Cadastro persistido, mas um ou mais streams não foram publicados no go2rtc."
+    )
+
     return {
         "status": "success",
         "camera": enriched,
-        "observation": "Cadastro persistido. Verifique status por stream em camera.streams.*",
+        "observation": observation,
+        "go2rtc_provisioning": provisioning,
     }
 
 

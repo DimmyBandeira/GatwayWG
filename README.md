@@ -24,8 +24,18 @@ Fornecer uma camada estável de ingestão, normalização, proxy e redistribuiç
 
 ## Contrato de consumo de stream
 
-- **WebGuardião consome:** `rtsp://<gateway_ip>:8554/<camera_uuid>`
-- **iVMS/DVR/VMS consomem:** `rtsp://<gateway_ip>:8554/<camera_uuid>`
+- **WebGuardião consome:** `rtsp://<gateway_ip>:8554/<stream_name>`
+- **iVMS/DVR/VMS consomem:** `rtsp://<gateway_ip>:8554/<stream_name>`
+
+## Provisionamento go2rtc no cadastro (GAT-12)
+
+- `POST /cameras/` persiste a câmera no Registry **e tenta publicar cada stream válido**
+  (`visible/thermal` `main/sub`) no go2rtc via API runtime.
+- Resposta inclui `go2rtc_provisioning` com resultado por stream:
+  - `ok=true` quando stream foi criado/atualizado;
+  - `ok=false` quando houve falha de publicação (sem perder o cadastro no Registry).
+- Para `source_type=file`, não há provisionamento no go2rtc; o modo legado `/stream/{uuid}`
+  continua disponível para laboratório/debug.
 
 ## Escopo técnico nesta fase
 

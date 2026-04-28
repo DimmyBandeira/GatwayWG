@@ -133,6 +133,64 @@ class Go2RTCClient:
             "webrtc_url": f"ws://{self.webrtc_host}:{self.webrtc_port}/api/ws?src={safe_name}",
         }
 
+    def upsert_stream(self, name: str, source_url: str) -> Dict[str, Any]:
+        stream_name = (name or "").strip()
+        src = (source_url or "").strip()
+        masked_src = self._mask_url(src) if src else ""
+
+        if not stream_name or not src:
+            return {
+                "ok": False,
+                "stream_name": stream_name,
+                "source_url_masked": masked_src,
+                "action": "skipped_invalid_input",
+                "error": "stream_name e source_url são obrigatórios",
+            }
+
+        params = {"name": stream_name, "src": src}
+        for method in ("PUT", "PATCH"):
+            try:
+                response = requests.request(
+                    method,
+                    f"{self.base_url}/api/streams",
+                    params=params,
+                    timeout=6,
+                )
+                response.raise_for_status()
+                logger.info("Stream provisionado no go2rtc: name=%s src=%s method=%s", stream_name, masked_src, method)
+                return {
+                    "ok": True,
+                    "stream_name": stream_name,
+                    "source_url_masked": masked_src,
+                    "action": "created_or_updated",
+                }
+            except requests.RequestException as exc:
+                status_code = getattr(exc.response, "status_code", None)
+                if status_code in {404, 405} and method == "PUT":
+                    continue
+                logger.warning(
+                    "Falha ao provisionar stream no go2rtc: name=%s src=%s method=%s error=%s",
+                    stream_name,
+                    masked_src,
+                    method,
+                    exc,
+                )
+                return {
+                    "ok": False,
+                    "stream_name": stream_name,
+                    "source_url_masked": masked_src,
+                    "action": "failed",
+                    "error": str(exc),
+                }
+
+        return {
+            "ok": False,
+            "stream_name": stream_name,
+            "source_url_masked": masked_src,
+            "action": "failed",
+            "error": "Métodos PUT/PATCH não suportados pelo go2rtc",
+        }
+
     def _fetch_streams(self) -> Optional[Dict[str, Dict[str, Any]]]:
         try:
             response = requests.get(f"{self.base_url}/api/streams", timeout=5)

@@ -91,7 +91,7 @@
       </div>
       <div class="form-row">
         <div class="form-group"><label><input type="checkbox" id="camHasThermal"/> Possui térmica</label></div>
-        <div class="form-group"><label>RTSP gerado (prévia)</label><input id="camRtspPreview" readonly/></div>
+        <div class="form-group"><label>URL gerada</label><input id="camRtspPreview" readonly/></div>
       </div>
       <div class="form-row">
         <div class="form-group"><button class="btn btn-sm" type="button" onclick="testAssistedRtsp()">Testar conexão RTSP</button> <span id="rtspTestFeedback" class="muted"></span></div>
@@ -376,7 +376,7 @@ function renderStreamStatus(cam){
 function renderList(){
   const c=document.getElementById('camerasList'); document.getElementById('camCount').innerHTML=cameras.length;
   if(!cameras.length){c.innerHTML='<div class="loading">Nenhuma câmera cadastrada</div>'; return;}
-  c.innerHTML=cameras.map(cam=>`<div class="cam-item"><div class="cam-info"><div class="cam-name">${escapeHtml(cam.name)}</div><div class="cam-details">UUID: ${cam.uuid}<br/>stream_count: ${cam.stream_count||0}<br/>RTSP principal: ${escapeHtml(cam.urls?.rtsp_url||'n/d')}<br/>Status principal: ${formatStatusLabel(cam.status_label)}<br/>${renderStreamStatus(cam)}</div></div><div class="cam-actions"><button class="btn btn-sm" onclick="testStream('${cam.uuid}')">🔗 Testar/URL</button><button class="btn btn-sm btn-danger" onclick="deleteCamera('${cam.uuid}')">🗑️</button></div></div>`).join('');
+  c.innerHTML=cameras.map(cam=>`<div class="cam-item"><div class="cam-info"><div class="cam-name">${escapeHtml(cam.name)}</div><div class="cam-details">UUID: ${cam.uuid}<br/>stream_count: ${cam.stream_count||0}<br/>RTSP principal: ${escapeHtml(cam.urls?.rtsp_url||'n/d')}<br/>Status principal: ${formatStatusLabel(cam.status_label)}<br/>${renderStreamStatus(cam)}</div></div><div class="cam-actions"><button class="btn btn-sm" onclick="testStream('${cam.uuid}')">${cam.source_type==='file'?'📂 Abrir vídeo':'🔗 Copiar/Abrir RTSP local'}</button><button class="btn btn-sm btn-danger" onclick="deleteCamera('${cam.uuid}')">🗑️</button></div></div>`).join('');
 }
 
 async function saveCamera(){
@@ -464,7 +464,14 @@ async function saveCamera(){
     const data=await res.json().catch(()=>({}));
     if(!res.ok) throw new Error(data.detail||'Erro ao cadastrar a câmera. Revise os dados e tente novamente.');
     await loadCameras();
-    setFormFeedback(`Câmera "${name}" cadastrada com sucesso.`,'success');
+    const failedProvision=Array.isArray(data.go2rtc_provisioning?.results) && data.go2rtc_provisioning.results.some(item=>item.ok===false);
+    if(payload.source_type==='file' || data.go2rtc_provisioning?.attempted===false){
+      setFormFeedback(`Câmera "${name}" cadastrada com sucesso.`,'success');
+    } else if(failedProvision){
+      setFormFeedback('Câmera salva, mas o stream não foi publicado no go2rtc.','error');
+    } else {
+      setFormFeedback('Câmera cadastrada e stream publicado no go2rtc.','success');
+    }
   }catch(err){
     setFormFeedback(err.message||'Erro inesperado ao cadastrar câmera.','error');
   }

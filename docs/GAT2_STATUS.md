@@ -43,7 +43,7 @@ O Gateway Python atua como **orquestrador de controle**, não como motor de IA:
 
 ## Próximos passos (GAT 3)
 
-1. Registro dinâmico real de streams no go2rtc (API/config runtime).
+1. Evoluir registro dinâmico atual para reconciliação automática/retentativa contínua.
 2. VideoWall/mosaico para operação.
 3. Contratos formais para consumo do WebGuardião IA por UUID.
 4. Evolução para worker nodes com distribuição de carga de controle.
@@ -65,7 +65,8 @@ O Gateway Python atua como **orquestrador de controle**, não como motor de IA:
 
 ### Observações de escopo
 
-- Esta etapa não cria/edita streams no go2rtc, apenas importa estado existente.
+- `POST /cameras/` já tenta criar/atualizar streams no go2rtc por API runtime.
+- `POST /sync/import-go2rtc` continua sendo fluxo de importação de estado existente.
 - Câmera real/térmica continua para etapa posterior.
 - `CaptureEngine` permanece legado/fallback.
 
