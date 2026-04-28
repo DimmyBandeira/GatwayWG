@@ -376,7 +376,7 @@ function renderStreamStatus(cam){
 function renderList(){
   const c=document.getElementById('camerasList'); document.getElementById('camCount').innerHTML=cameras.length;
   if(!cameras.length){c.innerHTML='<div class="loading">Nenhuma câmera cadastrada</div>'; return;}
-  c.innerHTML=cameras.map(cam=>`<div class="cam-item"><div class="cam-info"><div class="cam-name">${escapeHtml(cam.name)}</div><div class="cam-details">UUID: ${cam.uuid}<br/>stream_count: ${cam.stream_count||0}<br/>RTSP principal: ${escapeHtml(cam.urls?.rtsp_url||'n/d')}<br/>Status principal: ${formatStatusLabel(cam.status_label)}<br/>${renderStreamStatus(cam)}</div></div><div class="cam-actions"><button class="btn btn-sm" onclick="testStream('${cam.uuid}')">${cam.source_type==='file'?'📂 Abrir vídeo':'🔗 Copiar/Abrir RTSP local'}</button><button class="btn btn-sm btn-danger" onclick="deleteCamera('${cam.uuid}')">🗑️</button></div></div>`).join('');
+  c.innerHTML=cameras.map(cam=>`<div class="cam-item"><div class="cam-info"><div class="cam-name">${escapeHtml(cam.name)}</div><div class="cam-details">UUID: ${cam.uuid}<br/>stream_count: ${cam.stream_count||0}<br/>RTSP principal: ${escapeHtml(cam.urls?.rtsp_url||'n/d')}<br/>Status principal: ${formatStatusLabel(cam.status_label)}<br/>${renderStreamStatus(cam)}</div></div><div class="cam-actions">${cam.source_type==='file'?'':`<button class="btn btn-sm" onclick="publishCameraStreams('${cam.uuid}')">📡 Publicar go2rtc</button>`}<button class="btn btn-sm" onclick="testStream('${cam.uuid}')">${cam.source_type==='file'?'📂 Abrir vídeo':'🔗 Copiar/Abrir RTSP local'}</button><button class="btn btn-sm btn-danger" onclick="deleteCamera('${cam.uuid}')">🗑️</button></div></div>`).join('');
 }
 
 async function saveCamera(){
@@ -493,6 +493,20 @@ async function testStream(uuid){
     return;
   }
   alert('Sem RTSP disponível para esta câmera.');
+}
+
+async function publishCameraStreams(uuid){
+  try{
+    const res=await fetch(`/cameras/${uuid}/publish`,{method:'POST'});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.detail||'Falha ao publicar no go2rtc.');
+    const failed=Array.isArray(data.go2rtc_provisioning?.results) && data.go2rtc_provisioning.results.some(item=>item.ok===false);
+    if(failed) setFormFeedback('Publicação parcial: alguns streams não foram publicados no go2rtc.','error');
+    else setFormFeedback('Streams publicados no go2rtc com sucesso.','success');
+    await loadCameras();
+  }catch(err){
+    setFormFeedback(err.message||'Erro ao publicar streams no go2rtc.','error');
+  }
 }
 
 async function deleteCamera(uuid){const cam=cameras.find(c=>c.uuid===uuid); if(!confirm(`Remover "${cam?.name}"?`)) return; try{const res=await fetch(`/cameras/${uuid}`,{method:'DELETE'}); if(!res.ok) throw new Error(); await loadCameras();}catch{alert('❌ Erro ao remover');}}

@@ -66,6 +66,8 @@ O Gateway Python atua como **orquestrador de controle**, não como motor de IA:
 ### Observações de escopo
 
 - `POST /cameras/` já tenta criar/atualizar streams no go2rtc por API runtime.
+- Falhas de publicação entram em retentativa assíncrona com backoff no processo do Gateway.
+- Endpoint de recuperação operacional: `POST /cameras/{uuid}/publish`.
 - `POST /sync/import-go2rtc` continua sendo fluxo de importação de estado existente.
 - Câmera real/térmica continua para etapa posterior.
 - `CaptureEngine` permanece legado/fallback.

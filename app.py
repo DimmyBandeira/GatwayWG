@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import logging
+import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any, Dict, Generator, List, Optional, Tuple
+import time
 
 import cv2
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
@@ -43,6 +45,14 @@ registry_service = RegistryService()
 go2rtc_client = Go2RTCClient()
 go2rtc_discovery_service = Go2RTCDiscoveryService(go2rtc_client)
 active_engines: Dict[str, CaptureEngine] = {}
+provision_retry_lock = threading.Lock()
+provision_retry_jobs: Dict[str, Dict[str, Any]] = {}
+provision_retry_stop = threading.Event()
+provision_retry_thread: Optional[threading.Thread] = None
+
+PROVISION_RETRY_MAX_ATTEMPTS = 6
+PROVISION_RETRY_BASE_DELAY_SECONDS = 5
+PROVISION_RETRY_MAX_DELAY_SECONDS = 120
 
 
 class CameraPayload(BaseModel):
@@ -161,7 +171,91 @@ def _iter_camera_streams(camera: Dict[str, Any]) -> List[Dict[str, Any]]:
     return result
 
 
-def _provision_camera_streams(camera: Dict[str, Any]) -> Dict[str, Any]:
+def _retry_job_key(camera_uuid: str, modality: str, profile: str) -> str:
+    return f"{camera_uuid}:{modality}:{profile}"
+
+
+def _retry_delay(attempt: int) -> int:
+    return min(PROVISION_RETRY_BASE_DELAY_SECONDS * (2 ** max(0, attempt - 1)), PROVISION_RETRY_MAX_DELAY_SECONDS)
+
+
+def _schedule_provision_retry(
+    camera_uuid: str,
+    modality: str,
+    profile: str,
+    stream_name: str,
+    source_url: str,
+    attempt: int,
+    error: str = "",
+) -> None:
+    if attempt > PROVISION_RETRY_MAX_ATTEMPTS:
+        return
+    delay_seconds = _retry_delay(attempt)
+    job = {
+        "camera_uuid": camera_uuid,
+        "modality": modality,
+        "profile": profile,
+        "stream_name": stream_name,
+        "source_url": source_url,
+        "attempt": attempt,
+        "next_run_at": time.time() + delay_seconds,
+        "last_error": error,
+    }
+    with provision_retry_lock:
+        provision_retry_jobs[_retry_job_key(camera_uuid, modality, profile)] = job
+
+
+def _run_provision_retry_worker() -> None:
+    logger.info("provision_retry_worker_started")
+    while not provision_retry_stop.is_set():
+        now = time.time()
+        due_jobs: List[Dict[str, Any]] = []
+        with provision_retry_lock:
+            for key, job in list(provision_retry_jobs.items()):
+                if job.get("next_run_at", now + 1) <= now:
+                    due_jobs.append(job)
+                    provision_retry_jobs.pop(key, None)
+
+        for job in due_jobs:
+            result = go2rtc_client.upsert_stream(job["stream_name"], job["source_url"])
+            if result.get("ok"):
+                logger.info(
+                    "provision_retry_success uuid=%s stream=%s modality=%s profile=%s attempt=%s",
+                    job["camera_uuid"],
+                    job["stream_name"],
+                    job["modality"],
+                    job["profile"],
+                    job["attempt"],
+                )
+                continue
+
+            next_attempt = int(job.get("attempt", 1)) + 1
+            error_msg = str(result.get("error") or "unknown_error")
+            _schedule_provision_retry(
+                camera_uuid=job["camera_uuid"],
+                modality=job["modality"],
+                profile=job["profile"],
+                stream_name=job["stream_name"],
+                source_url=job["source_url"],
+                attempt=next_attempt,
+                error=error_msg,
+            )
+            logger.warning(
+                "provision_retry_failed uuid=%s stream=%s modality=%s profile=%s attempt=%s/%s error=%s",
+                job["camera_uuid"],
+                job["stream_name"],
+                job["modality"],
+                job["profile"],
+                next_attempt,
+                PROVISION_RETRY_MAX_ATTEMPTS,
+                error_msg,
+            )
+
+        provision_retry_stop.wait(1.0)
+    logger.info("provision_retry_worker_stopped")
+
+
+def _provision_camera_streams(camera: Dict[str, Any], schedule_retry: bool = True) -> Dict[str, Any]:
     source_type = str(camera.get("source_type") or "").lower()
     if source_type == "file":
         return {
@@ -178,6 +272,16 @@ def _provision_camera_streams(camera: Dict[str, Any]) -> Dict[str, Any]:
             continue
 
         upsert_result = go2rtc_client.upsert_stream(stream_name, source_url)
+        if schedule_retry and not upsert_result.get("ok"):
+            _schedule_provision_retry(
+                camera_uuid=str(camera.get("uuid") or ""),
+                modality=str(stream.get("modality") or ""),
+                profile=str(stream.get("profile") or ""),
+                stream_name=stream_name,
+                source_url=source_url,
+                attempt=1,
+                error=str(upsert_result.get("error") or ""),
+            )
         results.append(
             {
                 "modality": stream.get("modality"),
@@ -190,6 +294,21 @@ def _provision_camera_streams(camera: Dict[str, Any]) -> Dict[str, Any]:
         "attempted": bool(results),
         "results": results,
     }
+
+
+@app.on_event("startup")
+def startup_event() -> None:
+    global provision_retry_thread
+    provision_retry_stop.clear()
+    provision_retry_thread = threading.Thread(target=_run_provision_retry_worker, daemon=True, name="go2rtc-provision-retry")
+    provision_retry_thread.start()
+
+
+@app.on_event("shutdown")
+def shutdown_event() -> None:
+    provision_retry_stop.set()
+    if provision_retry_thread and provision_retry_thread.is_alive():
+        provision_retry_thread.join(timeout=2)
 
 
 def _resolve_sync_sets(
@@ -590,6 +709,23 @@ def add_camera(payload: CameraPayload) -> Dict[str, Any]:
         "status": "success",
         "camera": enriched,
         "observation": observation,
+        "go2rtc_provisioning": provisioning,
+    }
+
+
+@app.post("/cameras/{uuid}/publish")
+def publish_camera_streams(uuid: str) -> Dict[str, Any]:
+    camera = registry_service.get_camera(uuid)
+    if not camera:
+        raise HTTPException(status_code=404, detail="Câmera não encontrada")
+
+    provisioning = _provision_camera_streams(camera, schedule_retry=True)
+    snapshot = go2rtc_client.get_streams_snapshot()
+    enriched = _enrich_camera(camera, bool(snapshot["online"]), snapshot["streams"])
+
+    return {
+        "status": "success",
+        "camera": enriched,
         "go2rtc_provisioning": provisioning,
     }
 

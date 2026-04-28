@@ -34,6 +34,8 @@ Fornecer uma camada estável de ingestão, normalização, proxy e redistribuiç
 - Resposta inclui `go2rtc_provisioning` com resultado por stream:
   - `ok=true` quando stream foi criado/atualizado;
   - `ok=false` quando houve falha de publicação (sem perder o cadastro no Registry).
+- Falhas de publicação entram em retentativa assíncrona com backoff exponencial.
+- Endpoint operacional: `POST /cameras/{uuid}/publish` para republicar streams sob demanda.
 - Para `source_type=file`, não há provisionamento no go2rtc; o modo legado `/stream/{uuid}`
   continua disponível para laboratório/debug.
 
