@@ -369,14 +369,20 @@ function formatStatusLabel(s){if(s==='online')return'Online';if(s==='not_publish
 
 function renderStreamStatus(cam){
   const v=cam.streams?.visible||{}; const t=cam.streams?.thermal||{};
-  const fmt=(n)=> n?`${formatStatusLabel(n.status_label)} (${n.stream_name||'sem_nome'})`:'-';
-  return `visible.main: ${fmt(v.main)}<br/>visible.sub: ${fmt(v.sub)}<br/>thermal.main: ${fmt(t.main)}<br/>thermal.sub: ${fmt(t.sub)}`;
+  const fmt=(label,n)=>{
+    if(!n) return `${label}: -`;
+    const status=formatStatusLabel(n.status_label);
+    const streamName=n.stream_name||'sem_nome';
+    const rtsp=n.urls?.rtsp_url||'n/d';
+    return `${label}: ${status} (${escapeHtml(streamName)})<br/><span class="muted">RTSP: ${escapeHtml(rtsp)}</span>`;
+  };
+  return `${fmt('visible.main',v.main)}<br/>${fmt('visible.sub',v.sub)}<br/>${fmt('thermal.main',t.main)}<br/>${fmt('thermal.sub',t.sub)}`;
 }
 
 function renderList(){
   const c=document.getElementById('camerasList'); document.getElementById('camCount').innerHTML=cameras.length;
   if(!cameras.length){c.innerHTML='<div class="loading">Nenhuma câmera cadastrada</div>'; return;}
-  c.innerHTML=cameras.map(cam=>`<div class="cam-item"><div class="cam-info"><div class="cam-name">${escapeHtml(cam.name)}</div><div class="cam-details">UUID: ${cam.uuid}<br/>stream_count: ${cam.stream_count||0}<br/>RTSP principal: ${escapeHtml(cam.urls?.rtsp_url||'n/d')}<br/>Status principal: ${formatStatusLabel(cam.status_label)}<br/>${renderStreamStatus(cam)}</div></div><div class="cam-actions">${cam.source_type==='file'?'':`<button class="btn btn-sm" onclick="publishCameraStreams('${cam.uuid}')">📡 Publicar go2rtc</button>`}<button class="btn btn-sm" onclick="testStream('${cam.uuid}')">${cam.source_type==='file'?'📂 Abrir vídeo':'🔗 Copiar/Abrir RTSP local'}</button><button class="btn btn-sm btn-danger" onclick="deleteCamera('${cam.uuid}')">🗑️</button></div></div>`).join('');
+  c.innerHTML=cameras.map(cam=>`<div class="cam-item"><div class="cam-info"><div class="cam-name">${escapeHtml(cam.name)}</div><div class="cam-details">UUID: ${cam.uuid}<br/>stream_count: ${cam.stream_count||0}<br/>RTSP principal: ${escapeHtml(cam.urls?.rtsp_url||'n/d')}<br/>Status principal: ${formatStatusLabel(cam.status_label)}<br/>${renderStreamStatus(cam)}</div></div><div class="cam-actions">${cam.source_type==='file'?'':`<button class="btn btn-sm" title="Reenvia a configuração para o go2rtc (não abre vídeo na UI)." onclick="publishCameraStreams('${cam.uuid}')">📡 Re-publicar go2rtc</button>`}<button class="btn btn-sm" onclick="testStream('${cam.uuid}')">${cam.source_type==='file'?'📂 Abrir vídeo':'📋 Copiar RTSP (VLC)'}</button><button class="btn btn-sm btn-danger" onclick="deleteCamera('${cam.uuid}')">🗑️</button></div></div>`).join('');
 }
 
 async function saveCamera(){
@@ -489,7 +495,7 @@ async function testStream(uuid){
   const rtsp=cam.urls?.rtsp_url;
   if(rtsp){
     try{await navigator.clipboard.writeText(rtsp);}catch{}
-    alert(`Use no VLC/iVMS: ${rtsp}`);
+    alert(`URL copiada. Abra no VLC/iVMS: ${rtsp}`);
     return;
   }
   alert('Sem RTSP disponível para esta câmera.');
