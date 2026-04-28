@@ -18,11 +18,16 @@
   .btn-primary{background:#1677ff; color:#fff; border-color:#1677ff}
   .btn-danger{color:#dc2626; border-color:#dc2626}
   .btn-sm{padding:4px 10px; font-size:12px}
+  .mode-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; margin-bottom:12px}
+  .mode-card{border:1px solid #d1d5db; border-radius:10px; padding:12px; background:#fff; text-align:left; font-weight:600; cursor:pointer; transition:all .15s ease}
+  .mode-card:hover{border-color:#1677ff; transform:translateY(-1px)}
+  .mode-card.active{background:#eff6ff; border-color:#1677ff; color:#1d4ed8}
   .cam-item{display:flex; justify-content:space-between; align-items:center; padding:12px; border:1px solid #e5e7eb; border-radius:8px; margin-bottom:8px}
   .cam-info{flex:1}
   .cam-name{font-weight:600; margin-bottom:4px}
   .cam-details{font-size:12px; color:#6b7280}
-  .cam-actions{display:flex; gap:8px}
+  .cam-actions{display:flex; gap:8px; opacity:.75; transition:opacity .15s ease}
+  .cam-item:hover .cam-actions{opacity:1}
   .tag{display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px}
   .tag-green{background:#dcfce7; color:#166534}
   .tag-red{background:#fee2e2; color:#991b1b}
@@ -54,17 +59,20 @@
   <div class="card">
     <div class="card-title">+ Nova Câmera</div>
     <div class="form-row">
-      <div class="form-group"><label>Nome *</label><input type="text" id="camName" placeholder="Ex.: Portaria Principal"/></div>
-      <div class="form-group">
-        <label>Modo de cadastro</label>
-        <select id="registrationMode" onchange="onRegistrationModeChange()">
-          <option value="camera_ip">Câmera IP (Assistido)</option>
-          <option value="go2rtc">Discovery (go2rtc)</option>
-          <option value="file">Arquivo de vídeo</option>
-          <option value="advanced">Avançado (RTSP manual)</option>
-        </select>
-      </div>
+      <div class="form-group"><label>Nome da câmera *</label><input type="text" id="camName" placeholder="Ex.: Portaria Principal"/></div>
       <div class="form-group"><label>Worker</label><select id="clusterNode"><option value="auto">Automático</option></select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Como deseja adicionar a câmera?</label>
+        <div class="mode-grid">
+          <button type="button" id="modeCameraIp" class="mode-card" onclick="setMode('camera_ip')">🌐 Câmera IP</button>
+          <button type="button" id="modeGo2rtc" class="mode-card" onclick="setMode('go2rtc')">🔍 Usar stream existente</button>
+          <button type="button" id="modeFile" class="mode-card" onclick="setMode('file')">📁 Arquivo de vídeo</button>
+          <button type="button" id="modeAdvanced" class="mode-card" onclick="setMode('advanced')">⚙️ Avançado</button>
+        </div>
+        <input type="hidden" id="registrationMode" value="camera_ip"/>
+      </div>
     </div>
 
     <div id="modeHelp" class="mode-help"></div>
@@ -98,15 +106,16 @@
         <span id="importFeedback" class="muted"></span>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Stream selecionado</label><select id="go2rtcStreamSelect"></select></div>
+        <div class="form-group"><label>Selecionar stream do sistema</label><input id="go2rtcSelectedLabel" readonly placeholder="Clique em 'Usar este stream' abaixo."/></div>
         <div class="form-group"><label><input type="checkbox" id="go2rtcIsThermal"/> Usar como térmico ao salvar</label></div>
       </div>
+      <select id="go2rtcStreamSelect" class="hidden"></select>
       <div id="go2rtcStreamsList" class="discovery-table-wrap"><div class="loading">Nenhum stream carregado.</div></div>
     </div>
 
     <div id="fileFields" class="hidden">
       <div class="form-row">
-        <div class="form-group"><label>Caminho local no servidor *</label><input id="fileServerPath" placeholder="data/media/video.mp4"/></div>
+        <div class="form-group hidden"><label>Caminho local no servidor *</label><input id="fileServerPath" placeholder="data/media/video.mp4"/></div>
         <div class="form-group"><label>stream_name</label><input id="fileStreamName" placeholder="camera-file-main"/></div>
       </div>
       <div class="form-row">
@@ -121,7 +130,7 @@
 
     <div id="advancedFields" class="hidden">
       <div class="form-row">
-        <div class="form-group"><label>RTSP completo *</label><input id="advancedRtspUrl" placeholder="rtsp://usuario:senha@ip:554/Streaming/Channels/101"/></div>
+        <div class="form-group"><label>Endereço RTSP *</label><input id="advancedRtspUrl" placeholder="rtsp://usuario:senha@ip:554/Streaming/Channels/101"/></div>
         <div class="form-group"><label>stream_name *</label><input id="advancedStreamName" placeholder="camera-rtsp-main"/></div>
       </div>
       <div class="form-row">
@@ -129,7 +138,7 @@
       </div>
     </div>
 
-    <button class="btn btn-primary" onclick="saveCamera()">💾 Salvar</button>
+    <button class="btn btn-primary" onclick="saveCamera()">💾 Salvar e conectar</button>
     <div id="formFeedback" class="form-feedback"></div>
   </div>
 
@@ -223,6 +232,12 @@ function modeHelpText(mode){
   return 'Avançado: informe RTSP completo manualmente.';
 }
 
+function setMode(mode){
+  const modeInput=document.getElementById('registrationMode');
+  if(modeInput) modeInput.value=mode;
+  onRegistrationModeChange();
+}
+
 function onRegistrationModeChange(){
   const mode=document.getElementById('registrationMode').value;
   document.getElementById('cameraIpFields').classList.toggle('hidden', mode!=='camera_ip');
@@ -230,6 +245,10 @@ function onRegistrationModeChange(){
   document.getElementById('fileFields').classList.toggle('hidden', mode!=='file');
   document.getElementById('advancedFields').classList.toggle('hidden', mode!=='advanced');
   document.getElementById('modeHelp').textContent=modeHelpText(mode);
+  document.getElementById('modeCameraIp').classList.toggle('active', mode==='camera_ip');
+  document.getElementById('modeGo2rtc').classList.toggle('active', mode==='go2rtc');
+  document.getElementById('modeFile').classList.toggle('active', mode==='file');
+  document.getElementById('modeAdvanced').classList.toggle('active', mode==='advanced');
   updateRtspPreview();
 }
 
@@ -291,15 +310,17 @@ function detectStreamKind(s){
 function renderGo2rtcStreamsList(){
   const box=document.getElementById('go2rtcStreamsList');
   const select=document.getElementById('go2rtcStreamSelect');
+  const label=document.getElementById('go2rtcSelectedLabel');
   if(!go2rtcStreams.length){
     box.innerHTML='<div class="loading">Nenhum stream encontrado.</div>';
     select.innerHTML='<option value="">(nenhum)</option>';
+    if(label) label.value='';
     return;
   }
 
   box.innerHTML=`<table class="discovery-table"><thead><tr><th>stream_name</th><th>tipo</th><th>host</th><th>ações</th></tr></thead><tbody>${go2rtcStreams.map(s=>{
     const streamName=s.stream_name||s.name||'';
-    return `<tr><td>${escapeHtml(streamName)}</td><td>${escapeHtml(detectStreamKind(s))}</td><td>${escapeHtml(s.host||'-')}</td><td><button class="btn btn-sm" onclick="useGo2rtcStream(decodeURIComponent('${encodeURIComponent(streamName)}'),'visible')">Usar como visível</button> <button class="btn btn-sm" onclick="useGo2rtcStream(decodeURIComponent('${encodeURIComponent(streamName)}'),'thermal')">Usar como térmico</button></td></tr>`;
+    return `<tr><td>${escapeHtml(streamName)}</td><td>${escapeHtml(detectStreamKind(s))}</td><td>${escapeHtml(s.host||'-')}</td><td><button class="btn btn-sm btn-primary" onclick="useGo2rtcStream(decodeURIComponent('${encodeURIComponent(streamName)}'),'visible')">Usar este stream</button> <button class="btn btn-sm" onclick="useGo2rtcStream(decodeURIComponent('${encodeURIComponent(streamName)}'),'thermal')">Usar como térmico</button></td></tr>`;
   }).join('')}</tbody></table>`;
 
   select.innerHTML=go2rtcStreams.map(s=>{const streamName=s.stream_name||s.name||''; return `<option value="${escapeHtml(streamName)}">${escapeHtml(streamName)}</option>`;}).join('');
@@ -309,13 +330,13 @@ function useGo2rtcStream(streamName, modality){
   const found=go2rtcStreams.find(s=>(s.stream_name||s.name)===streamName);
   if(!found) return alert('Stream não encontrado no cache atual.');
 
-  document.getElementById('registrationMode').value='go2rtc';
-  onRegistrationModeChange();
+  setMode('go2rtc');
 
   const camName=document.getElementById('camName');
   if(!camName.value.trim()) camName.value=streamName;
 
   document.getElementById('go2rtcStreamSelect').value=streamName;
+  document.getElementById('go2rtcSelectedLabel').value=streamName;
   document.getElementById('go2rtcIsThermal').checked=(modality==='thermal');
 }
 
