@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
-from config import GO2RTC_RTSP_PORT
+from config import GO2RTC_API_BASE_URL, GO2RTC_RTSP_PORT
 from integrations.go2rtc_client import Go2RTCClient
 from services.camera_normalizer import normalize_stream_node, payload_has_fakepath, sanitize_plugins
 from services.capture_engine import CaptureEngine
@@ -508,6 +508,43 @@ def serve_ui() -> FileResponse:
 @app.get("/health")
 def health_check() -> Dict[str, str]:
     return {"status": "online", "version": "2.0.0"}
+
+
+@app.get("/dvr-compat/onvif-info")
+def dvr_compat_onvif_info() -> Dict[str, Any]:
+    return {
+        "onvif_endpoint": GO2RTC_API_BASE_URL.replace("localhost", "<gateway_ip>"),
+        "rtsp_port": GO2RTC_RTSP_PORT,
+        "transport": "tcp",
+        "auth_required": True,
+        "notes": [
+            "DVR deve usar protocolo ONVIF",
+            "Porta HTTP deve apontar para o go2rtc",
+            "RTSP será fornecido automaticamente pelo ONVIF",
+            "Testar Canal Remoto = 1",
+        ],
+    }
+
+
+@app.get("/dvr-compat/test-instructions")
+def dvr_compat_test_instructions() -> Dict[str, Any]:
+    return {
+        "title": "Checklist Intelbras DVR via ONVIF (go2rtc nativo)",
+        "steps": [
+            "No DVR, selecione protocolo ONVIF.",
+            "Use o IP do Gateway (onde o go2rtc está ativo).",
+            "Configure porta HTTP = 1984 (go2rtc API/ONVIF).",
+            f"Configure porta RTSP = {GO2RTC_RTSP_PORT}.",
+            "Informe usuário e senha válidos do ambiente.",
+            "Defina tipo de servidor/transporte: TCP.",
+            "Se necessário, teste Canal Remoto = 1.",
+        ],
+        "expected_rtsp_contract": "rtsp://<gateway_ip>:8554/<camera_uuid>",
+        "warnings": [
+            "Este endpoint é apenas informativo; o Gateway não implementa ONVIF custom.",
+            "Sem alteração dinâmica de go2rtc.yaml nesta operação.",
+        ],
+    }
 
 
 @app.get("/network/local-base")
