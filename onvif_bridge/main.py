@@ -185,7 +185,7 @@ def _detect_operation(xml_body: str) -> str:
     return "unknown"
 
 
-def _dispatch_onvif(operation: str, device: BridgeDevice, cfg: BridgeConfig) -> tuple[int, str]:
+def _dispatch_onvif(operation: str, device: BridgeDevice, cfg: BridgeConfig, service_host: str) -> tuple[int, str]:
     if operation == "GetSystemDateAndTime":
         return 200, build_get_system_date_and_time()
     if operation == "GetHostname":
@@ -197,9 +197,9 @@ def _dispatch_onvif(operation: str, device: BridgeDevice, cfg: BridgeConfig) -> 
     if operation == "GetDeviceInformation":
         return 200, build_get_device_information(device)
     if operation == "GetCapabilities":
-        return 200, build_get_capabilities(device, cfg)
+        return 200, build_get_capabilities(device, cfg, service_host)
     if operation == "GetServices":
-        return 200, build_get_services(device, cfg)
+        return 200, build_get_services(device, cfg, service_host)
     if operation == "GetProfiles":
         return 200, build_get_profiles(device)
     if operation == "GetVideoSources":
@@ -303,11 +303,13 @@ async def _handle_onvif_request(request: Request) -> Response:
         )
         raise
 
-    status_code, xml = _dispatch_onvif(operation, device, cfg)
+    status_code, xml = _dispatch_onvif(operation, device, cfg, device.virtual_ip)
     masked_stream = _mask_rtsp(f"rtsp://{cfg.auth_user}:{cfg.auth_pass}@{cfg.gateway_ip}:{cfg.rtsp_port}/{device.camera_uuid}")
+    device_xaddr = f"http://{device.virtual_ip}:{cfg.http_port}/onvif/device_service"
+    media_xaddr = f"http://{device.virtual_ip}:{cfg.http_port}/onvif/media_service"
 
     logger.info(
-        "onvif_request_ok method=%s path=%s host=%s client_ip=%s op=%s virtual_ip=%s uuid=%s wsse=%s auth_mode=%s stream=%s body=%s",
+        "onvif_request_ok method=%s path=%s host=%s client_ip=%s op=%s virtual_ip=%s uuid=%s wsse=%s auth_mode=%s device_xaddr=%s media_xaddr=%s stream=%s body=%s",
         request.method,
         request.url.path,
         host,
@@ -317,11 +319,13 @@ async def _handle_onvif_request(request: Request) -> Response:
         device.camera_uuid,
         wsse_present,
         cfg.auth_mode,
+        device_xaddr,
+        media_xaddr,
         masked_stream,
         body_preview,
     )
 
-    return Response(content=xml, media_type="application/soap+xml", status_code=status_code)
+    return Response(content=xml, media_type="application/soap+xml; charset=utf-8", status_code=status_code)
 
 
 @app.post("/onvif/device_service")

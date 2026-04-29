@@ -27,9 +27,9 @@ def build_get_device_information(device: BridgeDevice) -> str:
     )
 
 
-def build_get_capabilities(device: BridgeDevice, cfg: BridgeConfig) -> str:
-    device_xaddr = f"http://{device.virtual_ip}:{cfg.http_port}/onvif/device_service"
-    media_xaddr = f"http://{device.virtual_ip}:{cfg.http_port}/onvif/media_service"
+def build_get_capabilities(device: BridgeDevice, cfg: BridgeConfig, service_host: str) -> str:
+    device_xaddr = f"http://{service_host}:{cfg.http_port}/onvif/device_service"
+    media_xaddr = f"http://{service_host}:{cfg.http_port}/onvif/media_service"
     return soap_envelope(
         "<tds:GetCapabilitiesResponse><tds:Capabilities>"
         "<tt:Device>"
@@ -37,6 +37,11 @@ def build_get_capabilities(device: BridgeDevice, cfg: BridgeConfig) -> str:
         "</tt:Device>"
         "<tt:Media>"
         f"<tt:XAddr>{media_xaddr}</tt:XAddr>"
+        "<tt:StreamingCapabilities>"
+        "<tt:RTPMulticast>false</tt:RTPMulticast>"
+        "<tt:RTP_TCP>true</tt:RTP_TCP>"
+        "<tt:RTP_RTSP_TCP>true</tt:RTP_RTSP_TCP>"
+        "</tt:StreamingCapabilities>"
         "</tt:Media>"
         "</tds:Capabilities></tds:GetCapabilitiesResponse>"
     )
@@ -84,9 +89,9 @@ def build_get_scopes() -> str:
     )
 
 
-def build_get_services(device: BridgeDevice, cfg: BridgeConfig) -> str:
-    device_xaddr = f"http://{device.virtual_ip}:{cfg.http_port}/onvif/device_service"
-    media_xaddr = f"http://{device.virtual_ip}:{cfg.http_port}/onvif/media_service"
+def build_get_services(device: BridgeDevice, cfg: BridgeConfig, service_host: str) -> str:
+    device_xaddr = f"http://{service_host}:{cfg.http_port}/onvif/device_service"
+    media_xaddr = f"http://{service_host}:{cfg.http_port}/onvif/media_service"
     return soap_envelope(
         "<tds:GetServicesResponse>"
         "<tds:Service>"
