@@ -105,7 +105,8 @@ def test_soap_templates_include_expected_endpoints_and_rtsp_uri(tmp_path: Path):
     assert "<tt:RTPMulticast>false</tt:RTPMulticast>" in capabilities_xml
     assert "<tt:RTP_TCP>true</tt:RTP_TCP>" in capabilities_xml
     assert "<tt:RTP_RTSP_TCP>true</tt:RTP_RTSP_TCP>" in capabilities_xml
-    assert "rtsp://admin:secret@192.168.10.100:8554/uuid-camera-1" in stream_uri_xml
+    assert "rtsp://192.168.10.100:8554/uuid-camera-1" in stream_uri_xml
+    assert "admin:secret@" not in stream_uri_xml
     assert "GetSystemDateAndTimeResponse" in datetime_xml
     assert "SetSystemDateAndTimeResponse" in build_set_system_date_and_time()
     assert "<tt:LocalDateTime>" in datetime_xml
@@ -162,4 +163,5 @@ def test_get_stream_uri_intelbras_mode(tmp_path: Path):
     )
     cfg = load_config(str(cfg_file))
     stream_uri_xml = build_get_stream_uri(cfg.devices[0], cfg)
+    assert "admin:secret@" not in stream_uri_xml
     assert "/cam/realmonitor?channel=1&subtype=0" in stream_uri_xml

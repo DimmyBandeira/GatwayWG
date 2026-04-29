@@ -390,7 +390,10 @@ async def _handle_onvif_request(request: Request) -> Response:
     if status_code >= 400 and request.url.path.lower().startswith("/onvif/media"):
         status_code = 200
         xml = build_fault(f"Unsupported operation: {operation}")
-    masked_stream = _mask_rtsp(f"rtsp://{cfg.auth_user}:{cfg.auth_pass}@{cfg.gateway_ip}:{cfg.rtsp_port}/{device.camera_uuid}")
+    if device.rtsp_profile_mode == "intelbras_compatible":
+        masked_stream = f"rtsp://{cfg.gateway_ip}:{cfg.rtsp_port}/cam/realmonitor?channel={device.channel}&subtype={device.main_subtype}"
+    else:
+        masked_stream = f"rtsp://{cfg.gateway_ip}:{cfg.rtsp_port}/{device.camera_uuid}"
     device_xaddr = f"http://{device.virtual_ip}:{cfg.http_port}/onvif/device_service"
     media_xaddr = f"http://{device.virtual_ip}:{cfg.http_port}/onvif/media_service"
 

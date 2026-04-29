@@ -181,12 +181,9 @@ def build_get_video_encoder_configurations() -> str:
 
 def build_get_stream_uri(device: BridgeDevice, cfg: BridgeConfig) -> str:
     if device.rtsp_profile_mode == "intelbras_compatible":
-        uri = (
-            f"rtsp://{cfg.auth_user}:{cfg.auth_pass}@{cfg.gateway_ip}:{cfg.rtsp_port}"
-            f"/cam/realmonitor?channel={device.channel}&subtype={device.main_subtype}"
-        )
+        uri = f"rtsp://{cfg.gateway_ip}:{cfg.rtsp_port}/cam/realmonitor?channel={device.channel}&subtype={device.main_subtype}"
     else:
-        uri = f"rtsp://{cfg.auth_user}:{cfg.auth_pass}@{cfg.gateway_ip}:{cfg.rtsp_port}/{device.camera_uuid}"
+        uri = f"rtsp://{cfg.gateway_ip}:{cfg.rtsp_port}/{device.camera_uuid}"
     return soap_envelope(
         "<trt:GetStreamUriResponse><trt:MediaUri>"
         f"<tt:Uri>{uri}</tt:Uri>"
