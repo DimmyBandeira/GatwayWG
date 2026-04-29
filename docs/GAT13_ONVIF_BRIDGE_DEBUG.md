@@ -57,6 +57,7 @@ Exemplo validado em campo:
 - `GetServices`
 - `GetCapabilities`
 - `GetProfiles`
+- `GetScopes`
 
 ## Avanço observado
 
@@ -78,9 +79,15 @@ Autenticação prematura no handshake ONVIF DEVICE.
 
 No `auth_mode=basic`, as operações iniciais abaixo passaram a ser permissivas (sem 401):
 - `GetSystemDateAndTime`
+- `SetSystemDateAndTime`
 - `GetServices`
 - `GetCapabilities`
 - `GetDeviceInformation`
+- `GetScopes`
+
+Observação Intelbras:
+- O DVR também chama `GetScopes` (com e sem WS-Security) no handshake inicial.
+- `GetScopes` deve ser tratado como público/permissivo nesta fase para evitar `401` prematuro.
 
 Mantido:
 - `auth_mode=none` totalmente permissivo.

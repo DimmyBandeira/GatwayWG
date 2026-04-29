@@ -41,6 +41,7 @@ def test_permissive_handshake_operations():
     assert bridge_main._is_permissive_handshake_operation("GetServices") is True
     assert bridge_main._is_permissive_handshake_operation("GetCapabilities") is True
     assert bridge_main._is_permissive_handshake_operation("GetDeviceInformation") is True
+    assert bridge_main._is_permissive_handshake_operation("GetScopes") is True
     assert bridge_main._is_permissive_handshake_operation("GetProfiles") is True
     assert bridge_main._is_permissive_handshake_operation("GetVideoSources") is True
     assert bridge_main._is_permissive_handshake_operation("GetVideoEncoderConfigurations") is True
@@ -64,3 +65,14 @@ def test_dispatch_set_system_date_and_time_noop_response():
     status_code, xml = bridge_main._dispatch_onvif("SetSystemDateAndTime", device, cfg, "192.168.10.201")
     assert status_code == 200
     assert "SetSystemDateAndTimeResponse" in xml
+
+
+def test_detect_operation_get_scopes():
+    xml = """
+    <s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
+      <s:Body>
+        <tds:GetScopes xmlns:tds="http://www.onvif.org/ver10/device/wsdl"/>
+      </s:Body>
+    </s:Envelope>
+    """
+    assert bridge_main._detect_operation(xml) == "GetScopes"

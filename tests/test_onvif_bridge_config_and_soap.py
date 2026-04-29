@@ -12,6 +12,7 @@ from onvif_bridge.soap_templates import (
     build_get_network_interfaces,
     build_get_profiles,
     build_get_scopes,
+    build_get_scopes_response,
     build_get_services,
     build_get_stream_uri,
     build_get_system_date_and_time,
@@ -111,6 +112,12 @@ def test_soap_templates_include_expected_endpoints_and_rtsp_uri(tmp_path: Path):
     assert "GetHostnameResponse" in hostname_xml
     assert "192.168.10.201" in netif_xml
     assert "GetScopesResponse" in scopes_xml
+    assert "onvif://www.onvif.org/type/video_encoder" in scopes_xml
+    assert "onvif://www.onvif.org/type/NetworkVideoTransmitter" in scopes_xml
+    assert "onvif://www.onvif.org/name/GatwayWG" in scopes_xml
+    assert "onvif://www.onvif.org/hardware/Virtual_ONVIF_Camera" in scopes_xml
+    assert "onvif://www.onvif.org/location/country/Brazil" in scopes_xml
+    assert build_get_scopes_response() == scopes_xml
     assert "GetVideoEncoderConfigurationsResponse" in venc_xml
     assert "VideoEncoder_1" in venc_xml
     assert "<tt:H264Profile>High</tt:H264Profile>" in venc_xml

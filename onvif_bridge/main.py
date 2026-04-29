@@ -29,11 +29,11 @@ if __package__ in {None, ""}:
         build_get_scopes,
         build_get_services,
         build_get_stream_uri,
-    build_get_system_date_and_time,
-    build_get_video_encoder_configurations,
-    build_get_video_sources,
-    build_set_system_date_and_time,
-)
+        build_get_system_date_and_time,
+        build_get_video_encoder_configurations,
+        build_get_video_sources,
+        build_set_system_date_and_time,
+    )
 else:
     from .config import BridgeConfig, BridgeConfigError, BridgeDevice, load_config
     from .soap_templates import (
@@ -154,6 +154,7 @@ def _is_permissive_handshake_operation(operation: str) -> bool:
         "GetServices",
         "GetCapabilities",
         "GetDeviceInformation",
+        "GetScopes",
         "GetProfiles",
         "GetVideoSources",
         "GetVideoEncoderConfigurations",
@@ -402,6 +403,9 @@ async def _handle_onvif_request(request: Request) -> Response:
             timezone_value,
             daylight_value,
         )
+
+    if operation == "GetScopes":
+        logger.info("operation=GetScopes wsse=%s status=%s", wsse_present, status_code)
 
     if device.rtsp_profile_mode == "intelbras_compatible":
         logger.warning(

@@ -86,13 +86,20 @@ def build_get_network_interfaces(device: BridgeDevice) -> str:
     )
 
 
-def build_get_scopes() -> str:
+def build_get_scopes_response() -> str:
     return soap_envelope(
         "<tds:GetScopesResponse>"
         "<tds:Scopes><tt:ScopeDef>Fixed</tt:ScopeDef><tt:ScopeItem>onvif://www.onvif.org/type/video_encoder</tt:ScopeItem></tds:Scopes>"
+        "<tds:Scopes><tt:ScopeDef>Fixed</tt:ScopeDef><tt:ScopeItem>onvif://www.onvif.org/type/NetworkVideoTransmitter</tt:ScopeItem></tds:Scopes>"
+        "<tds:Scopes><tt:ScopeDef>Fixed</tt:ScopeDef><tt:ScopeItem>onvif://www.onvif.org/name/GatwayWG</tt:ScopeItem></tds:Scopes>"
         "<tds:Scopes><tt:ScopeDef>Fixed</tt:ScopeDef><tt:ScopeItem>onvif://www.onvif.org/hardware/Virtual_ONVIF_Camera</tt:ScopeItem></tds:Scopes>"
+        "<tds:Scopes><tt:ScopeDef>Fixed</tt:ScopeDef><tt:ScopeItem>onvif://www.onvif.org/location/country/Brazil</tt:ScopeItem></tds:Scopes>"
         "</tds:GetScopesResponse>"
     )
+
+
+def build_get_scopes() -> str:
+    return build_get_scopes_response()
 
 
 def build_get_services(device: BridgeDevice, cfg: BridgeConfig, service_host: str) -> str:
