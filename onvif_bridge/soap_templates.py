@@ -114,20 +114,20 @@ def build_get_profiles(device: BridgeDevice) -> str:
     return soap_envelope(
         "<trt:GetProfilesResponse>"
         "<trt:Profiles token=\"Profile_1\" fixed=\"true\">"
-        f"<tt:Name>{device.name}</tt:Name>"
+        "<tt:Name>MainStream</tt:Name>"
         "<tt:VideoSourceConfiguration token=\"VideoSourceConfig_1\" fixed=\"true\">"
         "<tt:Name>VideoSourceConfig</tt:Name>"
         "<tt:UseCount>1</tt:UseCount>"
         "<tt:SourceToken>VideoSource_1</tt:SourceToken>"
-        "<tt:Bounds x=\"0\" y=\"0\" width=\"1280\" height=\"720\"/>"
+        "<tt:Bounds x=\"0\" y=\"0\" width=\"1920\" height=\"1080\"/>"
         "</tt:VideoSourceConfiguration>"
         "<tt:VideoEncoderConfiguration token=\"VideoEncoder_1\" fixed=\"true\">"
         "<tt:Name>VideoEncoderConfig</tt:Name>"
         "<tt:UseCount>1</tt:UseCount>"
         "<tt:Encoding>H264</tt:Encoding>"
-        "<tt:Resolution><tt:Width>1280</tt:Width><tt:Height>720</tt:Height></tt:Resolution>"
+        "<tt:Resolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:Resolution>"
         "<tt:Quality>5</tt:Quality>"
-        "<tt:RateControl><tt:FrameRateLimit>15</tt:FrameRateLimit><tt:EncodingInterval>1</tt:EncodingInterval><tt:BitrateLimit>2048</tt:BitrateLimit></tt:RateControl>"
+        "<tt:RateControl><tt:FrameRateLimit>25</tt:FrameRateLimit><tt:EncodingInterval>1</tt:EncodingInterval><tt:BitrateLimit>4096</tt:BitrateLimit></tt:RateControl>"
         "<tt:H264><tt:GovLength>30</tt:GovLength><tt:H264Profile>High</tt:H264Profile></tt:H264>"
         "<tt:Multicast><tt:Address><tt:Type>IPv4</tt:Type><tt:IPv4Address>0.0.0.0</tt:IPv4Address></tt:Address><tt:Port>0</tt:Port><tt:TTL>1</tt:TTL><tt:AutoStart>false</tt:AutoStart></tt:Multicast>"
         "<tt:SessionTimeout>PT60S</tt:SessionTimeout>"
@@ -141,10 +141,10 @@ def build_get_video_sources() -> str:
     return soap_envelope(
         "<trt:GetVideoSourcesResponse>"
         "<trt:VideoSources token=\"VideoSource_1\">"
-        "<tt:Framerate>15</tt:Framerate>"
-        "<tt:Resolution><tt:Width>1280</tt:Width><tt:Height>720</tt:Height></tt:Resolution>"
+        "<tt:Framerate>25</tt:Framerate>"
+        "<tt:Resolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:Resolution>"
         "<tt:Imaging><tt:BacklightCompensation><tt:Mode>OFF</tt:Mode><tt:Level>0.0</tt:Level></tt:BacklightCompensation></tt:Imaging>"
-        "<tt:Bounds x=\"0\" y=\"0\" width=\"1280\" height=\"720\"/>"
+        "<tt:Bounds x=\"0\" y=\"0\" width=\"1920\" height=\"1080\"/>"
         "</trt:VideoSources>"
         "</trt:GetVideoSourcesResponse>"
     )
@@ -157,9 +157,9 @@ def build_get_video_encoder_configurations() -> str:
         "<tt:Name>VideoEncoderConfig</tt:Name>"
         "<tt:UseCount>1</tt:UseCount>"
         "<tt:Encoding>H264</tt:Encoding>"
-        "<tt:Resolution><tt:Width>1280</tt:Width><tt:Height>720</tt:Height></tt:Resolution>"
+        "<tt:Resolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:Resolution>"
         "<tt:Quality>5</tt:Quality>"
-        "<tt:RateControl><tt:FrameRateLimit>15</tt:FrameRateLimit><tt:EncodingInterval>1</tt:EncodingInterval><tt:BitrateLimit>2048</tt:BitrateLimit></tt:RateControl>"
+        "<tt:RateControl><tt:FrameRateLimit>25</tt:FrameRateLimit><tt:EncodingInterval>1</tt:EncodingInterval><tt:BitrateLimit>4096</tt:BitrateLimit></tt:RateControl>"
         "<tt:H264><tt:GovLength>30</tt:GovLength><tt:H264Profile>High</tt:H264Profile></tt:H264>"
         "<tt:Multicast><tt:Address><tt:Type>IPv4</tt:Type><tt:IPv4Address>0.0.0.0</tt:IPv4Address></tt:Address><tt:Port>0</tt:Port><tt:TTL>1</tt:TTL><tt:AutoStart>false</tt:AutoStart></tt:Multicast>"
         "<tt:SessionTimeout>PT60S</tt:SessionTimeout>"
@@ -169,7 +169,13 @@ def build_get_video_encoder_configurations() -> str:
 
 
 def build_get_stream_uri(device: BridgeDevice, cfg: BridgeConfig) -> str:
-    uri = f"rtsp://{cfg.auth_user}:{cfg.auth_pass}@{cfg.gateway_ip}:{cfg.rtsp_port}/{device.camera_uuid}"
+    if device.rtsp_profile_mode == "intelbras_compatible":
+        uri = (
+            f"rtsp://{cfg.auth_user}:{cfg.auth_pass}@{cfg.gateway_ip}:{cfg.rtsp_port}"
+            f"/cam/realmonitor?channel={device.channel}&subtype={device.main_subtype}"
+        )
+    else:
+        uri = f"rtsp://{cfg.auth_user}:{cfg.auth_pass}@{cfg.gateway_ip}:{cfg.rtsp_port}/{device.camera_uuid}"
     return soap_envelope(
         "<trt:GetStreamUriResponse><trt:MediaUri>"
         f"<tt:Uri>{uri}</tt:Uri>"

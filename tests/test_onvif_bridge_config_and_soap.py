@@ -37,6 +37,10 @@ def test_load_config_and_device_lookup(tmp_path: Path):
                         "manufacturer": "GatwayWG",
                         "model": "Virtual ONVIF Camera",
                         "profile_token": "Profile_1",
+                        "channel": 1,
+                        "main_subtype": 0,
+                        "sub_subtype": 1,
+                        "rtsp_profile_mode": "uuid",
                     }
                 ],
             }
@@ -50,6 +54,9 @@ def test_load_config_and_device_lookup(tmp_path: Path):
     assert device is not None
     assert device.camera_uuid == "uuid-camera-1"
     assert cfg.auth_mode == "none"
+    assert device.channel == 1
+    assert device.main_subtype == 0
+    assert device.rtsp_profile_mode == "uuid"
     assert len(cfg.sanitized_devices()) == 1
 
 
@@ -105,5 +112,39 @@ def test_soap_templates_include_expected_endpoints_and_rtsp_uri(tmp_path: Path):
     assert "VideoEncoder_1" in venc_xml
     assert "<tt:H264Profile>High</tt:H264Profile>" in venc_xml
     assert "Profile_1" in build_get_profiles(device)
+    assert "MainStream" in build_get_profiles(device)
     assert "http://192.168.10.201:8080/onvif/device_service" in services_xml
     assert "http://192.168.10.201:8080/onvif/media_service" in services_xml
+
+
+def test_get_stream_uri_intelbras_mode(tmp_path: Path):
+    cfg_file = tmp_path / "onvif_bridge_config.json"
+    cfg_file.write_text(
+        json.dumps(
+            {
+                "gateway_ip": "192.168.10.100",
+                "rtsp_port": 8554,
+                "http_port": 8080,
+                "auth_user": "admin",
+                "auth_pass": "secret",
+                "devices": [
+                    {
+                        "virtual_ip": "192.168.10.201",
+                        "camera_uuid": "uuid-camera-1",
+                        "name": "Camera Virtual 01",
+                        "manufacturer": "GatwayWG",
+                        "model": "Virtual ONVIF Camera",
+                        "profile_token": "Profile_1",
+                        "channel": 1,
+                        "main_subtype": 0,
+                        "sub_subtype": 1,
+                        "rtsp_profile_mode": "intelbras_compatible",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    cfg = load_config(str(cfg_file))
+    stream_uri_xml = build_get_stream_uri(cfg.devices[0], cfg)
+    assert "/cam/realmonitor?channel=1&subtype=0" in stream_uri_xml

@@ -11,7 +11,11 @@
       "name": "Camera Virtual 01",
       "manufacturer": "GatwayWG",
       "model": "Virtual ONVIF Camera",
-      "profile_token": "Profile_1"
+      "profile_token": "Profile_1",
+      "channel": 1,
+      "main_subtype": 0,
+      "sub_subtype": 1,
+      "rtsp_profile_mode": "uuid"
     }
   ],
   "auth_mode": "basic"

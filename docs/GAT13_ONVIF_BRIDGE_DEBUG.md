@@ -17,6 +17,23 @@ Permitir que DVR Intelbras MHDX consuma streams do GatwayWG via ONVIF Bridge sem
 
 `rtsp://<gateway_ip>:8554/<camera_uuid>`
 
+## Referência Intelbras/Dahua (HTTP API V3.59)
+
+- Padrão RTSP de live preview:
+  - `/cam/realmonitor?channel=1&subtype=0`
+- Semântica de canal:
+  - request começa em `channel=1`
+  - resposta interna pode expor `ChannelNo` iniciando em `0`
+- Semântica de subtype:
+  - `subtype=0` main stream
+  - `subtype=1` sub stream 1
+  - `subtype=2` sub stream 2
+- `OnvifLoginCheck`:
+  - `false`: acesso ONVIF sem autenticação rígida
+  - `true`: exige usuário/senha
+
+Esses pontos justificam handshake inicial permissivo no Bridge.
+
 ## Comandos usados
 
 ```powershell

@@ -4,6 +4,7 @@ import base64
 import logging
 import os
 import re
+import xml.etree.ElementTree as ET
 from collections import deque
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -163,7 +164,26 @@ def _extract_profile_token(xml_body: str) -> str | None:
     return None
 
 
+def _detect_soap_body_first_tag(xml_body: str) -> str | None:
+    try:
+        root = ET.fromstring(xml_body)
+    except ET.ParseError:
+        return None
+    body_node = None
+    for child in root:
+        if child.tag.endswith("Body"):
+            body_node = child
+            break
+    if body_node is None:
+        return None
+    for node in body_node:
+        return node.tag
+    return None
+
+
 def _enforce_auth(request: Request, cfg: BridgeConfig, operation: str) -> None:
+    if request.url.path.lower().startswith("/onvif/media"):
+        return
     if cfg.auth_mode == "none":
         return
     if _is_permissive_handshake_operation(operation):
@@ -236,6 +256,7 @@ def _dispatch_onvif(operation: str, device: BridgeDevice, cfg: BridgeConfig, ser
 async def request_logger_middleware(request: Request, call_next):
     cfg = get_bridge_config()
     body = (await request.body()).decode("utf-8", errors="ignore")
+    first_tag = _detect_soap_body_first_tag(body)
     operation = _detect_operation(body)
     host = request.headers.get("host", "").split(":", 1)[0]
     client_ip = request.client.host if request.client else ""
@@ -264,6 +285,7 @@ async def request_logger_middleware(request: Request, call_next):
             "content_type": content_type,
             "soap_action_header": soap_action_header,
             "soap_operation_detected": operation,
+            "soap_body_first_tag": first_tag,
             "body_preview": body_preview,
             "status_code": response.status_code,
         }
@@ -304,6 +326,7 @@ async def _handle_onvif_request(request: Request) -> Response:
     operation = getattr(request.state, "detected_operation", _detect_operation(body))
     wsse_present = _detect_wsse_username_token(body)
     profile_token = _extract_profile_token(body)
+    first_tag = _detect_soap_body_first_tag(body)
     host = request.headers.get("host", "").split(":", 1)[0]
     client_ip = request.client.host if request.client else ""
     body_preview = _limited_body_for_log(body, cfg)
@@ -326,17 +349,23 @@ async def _handle_onvif_request(request: Request) -> Response:
         raise
 
     status_code, xml = _dispatch_onvif(operation, device, cfg, device.virtual_ip)
+    if operation == "unknown" and request.url.path.lower().startswith("/onvif/media"):
+        status_code = 200
     masked_stream = _mask_rtsp(f"rtsp://{cfg.auth_user}:{cfg.auth_pass}@{cfg.gateway_ip}:{cfg.rtsp_port}/{device.camera_uuid}")
     device_xaddr = f"http://{device.virtual_ip}:{cfg.http_port}/onvif/device_service"
     media_xaddr = f"http://{device.virtual_ip}:{cfg.http_port}/onvif/media_service"
 
     logger.info(
-        "onvif_request_ok method=%s path=%s host=%s client_ip=%s op=%s profile_token=%s virtual_ip=%s uuid=%s wsse=%s auth_mode=%s device_xaddr=%s media_xaddr=%s stream=%s body=%s",
+        "onvif_request_ok method=%s path=%s host=%s client_ip=%s op=%s first_tag=%s profile_mode=%s channel=%s subtype=%s profile_token=%s virtual_ip=%s uuid=%s wsse=%s auth_mode=%s device_xaddr=%s media_xaddr=%s stream=%s status=%s body=%s",
         request.method,
         request.url.path,
         host,
         client_ip,
         operation,
+        first_tag,
+        device.rtsp_profile_mode,
+        device.channel,
+        device.main_subtype,
         profile_token,
         device.virtual_ip,
         device.camera_uuid,
@@ -345,8 +374,17 @@ async def _handle_onvif_request(request: Request) -> Response:
         device_xaddr,
         media_xaddr,
         masked_stream,
+        status_code,
         body_preview,
     )
+
+    if device.rtsp_profile_mode == "intelbras_compatible":
+        logger.warning(
+            "intelbras_profile_mode_enabled uuid=%s channel=%s subtype=%s note=ensure_go2rtc_alias_when_needed",
+            device.camera_uuid,
+            device.channel,
+            device.main_subtype,
+        )
 
     return Response(content=xml, media_type="application/soap+xml; charset=utf-8", status_code=status_code)
 

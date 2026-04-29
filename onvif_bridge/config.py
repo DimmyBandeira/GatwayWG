@@ -18,6 +18,10 @@ class BridgeDevice:
     manufacturer: str
     model: str
     profile_token: str
+    channel: int
+    main_subtype: int
+    sub_subtype: int
+    rtsp_profile_mode: str
 
 
 @dataclass(frozen=True)
@@ -46,6 +50,10 @@ class BridgeConfig:
                 "manufacturer": d.manufacturer,
                 "model": d.model,
                 "profile_token": d.profile_token,
+                "channel": d.channel,
+                "main_subtype": d.main_subtype,
+                "sub_subtype": d.sub_subtype,
+                "rtsp_profile_mode": d.rtsp_profile_mode,
             }
             for d in self.devices
         ]
@@ -67,6 +75,11 @@ def _require_int(item: dict[str, Any], key: str, where: str) -> int:
     if not isinstance(value, int):
         raise BridgeConfigError(f"Campo obrigatório inválido: {where}.{key}")
     return value
+
+
+def _optional_int(item: dict[str, Any], key: str, default: int) -> int:
+    value = item.get(key, default)
+    return value if isinstance(value, int) else default
 
 
 def load_config(config_path: str | None = None) -> BridgeConfig:
@@ -100,6 +113,10 @@ def load_config(config_path: str | None = None) -> BridgeConfig:
     for idx, item in enumerate(raw_devices):
         if not isinstance(item, dict):
             raise BridgeConfigError(f"Dispositivo inválido em root.devices[{idx}]")
+        profile_mode = str(item.get("rtsp_profile_mode", "uuid")).strip() or "uuid"
+        if profile_mode not in {"uuid", "intelbras_compatible"}:
+            profile_mode = "uuid"
+
         devices.append(
             BridgeDevice(
                 virtual_ip=_require_str(item, "virtual_ip", f"root.devices[{idx}]"),
@@ -108,6 +125,10 @@ def load_config(config_path: str | None = None) -> BridgeConfig:
                 manufacturer=_require_str(item, "manufacturer", f"root.devices[{idx}]"),
                 model=_require_str(item, "model", f"root.devices[{idx}]"),
                 profile_token=_require_str(item, "profile_token", f"root.devices[{idx}]"),
+                channel=_optional_int(item, "channel", 1),
+                main_subtype=_optional_int(item, "main_subtype", 0),
+                sub_subtype=_optional_int(item, "sub_subtype", 1),
+                rtsp_profile_mode=profile_mode,
             )
         )
 
