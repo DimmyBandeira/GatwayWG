@@ -171,6 +171,8 @@ Testar no VLC:
 
 1. `rtsp://<gateway_ip>:8554/<stream_base>`
 2. `rtsp://<gateway_ip>:8554/<camera_uuid>`
+3. Se RTSP auth estiver ativa no go2rtc: `rtsp://admin:Conectar@<gateway_ip>:8554/<stream_base>`
+4. Se RTSP auth estiver ativa no go2rtc: `rtsp://admin:Conectar@<gateway_ip>:8554/<camera_uuid>`
 
 Critério:
 - ambos devem abrir com vídeo antes de prosseguir
@@ -196,6 +198,17 @@ Invoke-RestMethod http://127.0.0.1:1984/api/streams
 
 Critério:
 - durante conexão do DVR, stream de destino apresenta consumer ativo (não nulo)
+
+## Gate 7 — Checklist Intelbras específico (pré-DVR)
+
+1. Subir go2rtc.
+2. Consultar `http://127.0.0.1:1984/api/streams`.
+3. Validar `cam_uti_01-file-main` existe.
+4. Validar `3226ea01-0954-44bb-b782-506534f1a94a` existe.
+5. Testar no VLC:
+   - `rtsp://admin:Conectar@<gateway_ip>:8554/cam_uti_01-file-main`
+   - `rtsp://admin:Conectar@<gateway_ip>:8554/3226ea01-0954-44bb-b782-506534f1a94a`
+6. Só depois testar DVR Intelbras.
 
 ---
 
