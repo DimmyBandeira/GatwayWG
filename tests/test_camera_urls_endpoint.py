@@ -58,5 +58,8 @@ def test_get_camera_urls_returns_canonical_fields(monkeypatch):
     assert payload["uuid"] == camera_uuid
     assert payload["canonical_urls"]["rtsp_url"].endswith(f"/{camera_uuid}")
     assert payload["canonical_urls"]["webrtc_url"].endswith(f"src={camera_uuid}")
+    assert "localhost" not in payload["canonical_urls"]["dvr_intelbras_main"]
+    assert payload["canonical_urls"]["dvr_intelbras_main"].endswith("/cam/realmonitor?channel=1&subtype=0")
+    assert payload["canonical_urls"]["dvr_intelbras_sub"].endswith("/cam/realmonitor?channel=1&subtype=1")
     assert payload["canonical_status"]["status_label"] == "online"
     assert payload["canonical_status"]["go2rtc_registered"] is True

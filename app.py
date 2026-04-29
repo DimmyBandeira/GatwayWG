@@ -69,6 +69,9 @@ class CameraPayload(BaseModel):
     node: Optional[str] = "auto"
     created_at: Optional[str] = None
     streams: Optional[Dict[str, Any]] = None
+    dvr_channel: Optional[int] = 1
+    dvr_subtype_main: Optional[int] = 0
+    dvr_subtype_sub: Optional[int] = 1
 
     # Compatibilidade com contrato antigo
     type: Optional[str] = None
@@ -146,6 +149,9 @@ def _normalize_camera(payload: CameraPayload) -> Dict[str, Any]:
         "plugins": sanitize_plugins(payload.plugins),
         "node": payload.node or "auto",
         "created_at": created_at,
+        "dvr_channel": int(payload.dvr_channel if payload.dvr_channel is not None else 1),
+        "dvr_subtype_main": int(payload.dvr_subtype_main if payload.dvr_subtype_main is not None else 0),
+        "dvr_subtype_sub": int(payload.dvr_subtype_sub if payload.dvr_subtype_sub is not None else 1),
     }
 
 
@@ -493,10 +499,15 @@ def _enrich_camera(camera: Dict[str, Any], go2rtc_online: bool, streams_index: D
         "status": payload["status_label"],
     }
     camera_uuid = str(payload.get("uuid") or "").strip()
+    dvr_channel = int(payload.get("dvr_channel", 1))
+    dvr_subtype_main = int(payload.get("dvr_subtype_main", 0))
+    dvr_subtype_sub = int(payload.get("dvr_subtype_sub", 1))
     payload["canonical_urls"] = (
         {
             **go2rtc_client.build_stream_urls(camera_uuid),
             "mjpeg_url": f"/stream/{camera_uuid}",
+            "dvr_intelbras_main": f"rtsp://<gateway_ip>:{GO2RTC_RTSP_PORT}/cam/realmonitor?channel={dvr_channel}&subtype={dvr_subtype_main}",
+            "dvr_intelbras_sub": f"rtsp://<gateway_ip>:{GO2RTC_RTSP_PORT}/cam/realmonitor?channel={dvr_channel}&subtype={dvr_subtype_sub}",
         }
         if camera_uuid
         else None
