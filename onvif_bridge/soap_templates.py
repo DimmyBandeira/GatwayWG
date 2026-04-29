@@ -61,6 +61,10 @@ def build_get_system_date_and_time() -> str:
     )
 
 
+def build_set_system_date_and_time() -> str:
+    return soap_envelope("<tds:SetSystemDateAndTimeResponse/>")
+
+
 def build_get_hostname(device: BridgeDevice) -> str:
     return soap_envelope(
         "<tds:GetHostnameResponse><tds:HostnameInformation>"

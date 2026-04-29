@@ -29,10 +29,11 @@ if __package__ in {None, ""}:
         build_get_scopes,
         build_get_services,
         build_get_stream_uri,
-        build_get_system_date_and_time,
-        build_get_video_encoder_configurations,
-        build_get_video_sources,
-    )
+    build_get_system_date_and_time,
+    build_get_video_encoder_configurations,
+    build_get_video_sources,
+    build_set_system_date_and_time,
+)
 else:
     from .config import BridgeConfig, BridgeConfigError, BridgeDevice, load_config
     from .soap_templates import (
@@ -148,6 +149,7 @@ def _parse_basic_auth(header_value: str | None) -> tuple[str, str] | None:
 def _is_permissive_handshake_operation(operation: str) -> bool:
     return operation in {
         "GetSystemDateAndTime",
+        "SetSystemDateAndTime",
         "GetServices",
         "GetCapabilities",
         "GetDeviceInformation",
@@ -210,6 +212,7 @@ def _enforce_auth(request: Request, cfg: BridgeConfig, operation: str) -> None:
 def _detect_operation(xml_body: str) -> str:
     operations = [
         "GetSystemDateAndTime",
+        "SetSystemDateAndTime",
         "GetHostname",
         "GetNetworkInterfaces",
         "GetScopes",
@@ -227,9 +230,19 @@ def _detect_operation(xml_body: str) -> str:
     return "unknown"
 
 
+def _extract_set_datetime_metadata(xml_body: str) -> tuple[str | None, str | None]:
+    timezone_match = re.search(r"<[^>]*TimeZone[^>]*>(.*?)</[^>]*TimeZone[^>]*>", xml_body, flags=re.IGNORECASE | re.DOTALL)
+    daylight_match = re.search(r"<[^>]*DaylightSavings[^>]*>([^<]+)</[^>]*DaylightSavings[^>]*>", xml_body, flags=re.IGNORECASE)
+    timezone_value = timezone_match.group(1).strip() if timezone_match else None
+    daylight_value = daylight_match.group(1).strip() if daylight_match else None
+    return timezone_value, daylight_value
+
+
 def _dispatch_onvif(operation: str, device: BridgeDevice, cfg: BridgeConfig, service_host: str) -> tuple[int, str]:
     if operation == "GetSystemDateAndTime":
         return 200, build_get_system_date_and_time()
+    if operation == "SetSystemDateAndTime":
+        return 200, build_set_system_date_and_time()
     if operation == "GetHostname":
         return 200, build_get_hostname(device)
     if operation == "GetNetworkInterfaces":
@@ -328,6 +341,7 @@ async def _handle_onvif_request(request: Request) -> Response:
     wsse_present = _detect_wsse_username_token(body)
     profile_token = _extract_profile_token(body)
     first_tag = _detect_soap_body_first_tag(body)
+    timezone_value, daylight_value = _extract_set_datetime_metadata(body) if operation == "SetSystemDateAndTime" else (None, None)
     host = request.headers.get("host", "").split(":", 1)[0]
     client_ip = request.client.host if request.client else ""
     body_preview = _limited_body_for_log(body, cfg)
@@ -357,7 +371,7 @@ async def _handle_onvif_request(request: Request) -> Response:
     media_xaddr = f"http://{device.virtual_ip}:{cfg.http_port}/onvif/media_service"
 
     logger.info(
-        "onvif_request_ok method=%s path=%s host=%s client_ip=%s op=%s first_tag=%s profile_mode=%s channel=%s subtype=%s profile_token=%s virtual_ip=%s uuid=%s wsse=%s auth_mode=%s device_xaddr=%s media_xaddr=%s stream=%s status=%s body=%s",
+        "onvif_request_ok method=%s path=%s host=%s client_ip=%s op=%s first_tag=%s profile_mode=%s channel=%s subtype=%s profile_token=%s timezone=%s daylight_savings=%s virtual_ip=%s uuid=%s wsse=%s auth_mode=%s device_xaddr=%s media_xaddr=%s stream=%s status=%s body=%s",
         request.method,
         request.url.path,
         host,
@@ -368,6 +382,8 @@ async def _handle_onvif_request(request: Request) -> Response:
         device.channel,
         device.main_subtype,
         profile_token,
+        timezone_value,
+        daylight_value,
         device.virtual_ip,
         device.camera_uuid,
         wsse_present,
@@ -378,6 +394,13 @@ async def _handle_onvif_request(request: Request) -> Response:
         status_code,
         body_preview,
     )
+
+    if operation == "SetSystemDateAndTime":
+        logger.info(
+            "set_system_date_time_noop_accepted timezone=%s daylight_savings=%s status=accepted_noop",
+            timezone_value,
+            daylight_value,
+        )
 
     if device.rtsp_profile_mode == "intelbras_compatible":
         logger.warning(

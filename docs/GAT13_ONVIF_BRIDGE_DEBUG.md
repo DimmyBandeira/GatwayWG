@@ -62,6 +62,8 @@ Exemplo validado em campo:
 
 - O DVR já avançou até `GetProfiles`, confirmando que rede, rota e handshake inicial ONVIF DEVICE estão operacionais.
 - Hipótese principal nesta etapa: `GetProfilesResponse` incompleto/incompatível para Intelbras.
+- Também foi observado `SetSystemDateAndTime` no Device Service em modo `Manual`.
+- Para compatibilidade, o bridge aceita `SetSystemDateAndTime` como **noop** (não altera relógio do sistema) e responde SOAP 1.2 de sucesso.
 
 ## Diagnóstico do 401
 

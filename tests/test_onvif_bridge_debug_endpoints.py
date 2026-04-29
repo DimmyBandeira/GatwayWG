@@ -37,6 +37,7 @@ def test_fallback_config_when_file_missing(monkeypatch):
 
 def test_permissive_handshake_operations():
     assert bridge_main._is_permissive_handshake_operation("GetSystemDateAndTime") is True
+    assert bridge_main._is_permissive_handshake_operation("SetSystemDateAndTime") is True
     assert bridge_main._is_permissive_handshake_operation("GetServices") is True
     assert bridge_main._is_permissive_handshake_operation("GetCapabilities") is True
     assert bridge_main._is_permissive_handshake_operation("GetDeviceInformation") is True
