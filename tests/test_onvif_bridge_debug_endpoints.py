@@ -33,3 +33,10 @@ def test_fallback_config_when_file_missing(monkeypatch):
     assert cfg.devices == []
     assert cfg.auth_mode == "none"
     assert bridge_main.bridge_health() == {"status": "ok"}
+
+
+def test_permissive_handshake_operations():
+    assert bridge_main._is_permissive_handshake_operation("GetSystemDateAndTime") is True
+    assert bridge_main._is_permissive_handshake_operation("GetServices") is True
+    assert bridge_main._is_permissive_handshake_operation("GetCapabilities") is True
+    assert bridge_main._is_permissive_handshake_operation("GetProfiles") is False

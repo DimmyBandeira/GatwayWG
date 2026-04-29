@@ -96,6 +96,7 @@ def test_soap_templates_include_expected_endpoints_and_rtsp_uri(tmp_path: Path):
     assert "<tt:RTP_RTSP_TCP>true</tt:RTP_RTSP_TCP>" in capabilities_xml
     assert "rtsp://admin:secret@192.168.10.100:8554/uuid-camera-1" in stream_uri_xml
     assert "GetSystemDateAndTimeResponse" in datetime_xml
+    assert "<tt:LocalDateTime>" in datetime_xml
     assert "GetHostnameResponse" in hostname_xml
     assert "192.168.10.201" in netif_xml
     assert "GetScopesResponse" in scopes_xml

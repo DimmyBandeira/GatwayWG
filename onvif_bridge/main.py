@@ -144,8 +144,14 @@ def _parse_basic_auth(header_value: str | None) -> tuple[str, str] | None:
     return username, password
 
 
-def _enforce_auth(request: Request, cfg: BridgeConfig) -> None:
+def _is_permissive_handshake_operation(operation: str) -> bool:
+    return operation in {"GetSystemDateAndTime", "GetServices", "GetCapabilities"}
+
+
+def _enforce_auth(request: Request, cfg: BridgeConfig, operation: str) -> None:
     if cfg.auth_mode == "none":
+        return
+    if _is_permissive_handshake_operation(operation):
         return
 
     parsed = _parse_basic_auth(request.headers.get("authorization"))
@@ -287,7 +293,7 @@ async def _handle_onvif_request(request: Request) -> Response:
     body_preview = _limited_body_for_log(body, cfg)
 
     try:
-        _enforce_auth(request, cfg)
+        _enforce_auth(request, cfg, operation)
         device = _get_device_or_404(request, cfg)
     except HTTPException as exc:
         logger.warning(

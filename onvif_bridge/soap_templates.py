@@ -55,6 +55,8 @@ def build_get_system_date_and_time() -> str:
         "<tt:TimeZone><tt:TZ>UTC</tt:TZ></tt:TimeZone>"
         "<tt:UTCDateTime><tt:Time><tt:Hour>0</tt:Hour><tt:Minute>0</tt:Minute><tt:Second>0</tt:Second></tt:Time>"
         "<tt:Date><tt:Year>2026</tt:Year><tt:Month>1</tt:Month><tt:Day>1</tt:Day></tt:Date></tt:UTCDateTime>"
+        "<tt:LocalDateTime><tt:Time><tt:Hour>0</tt:Hour><tt:Minute>0</tt:Minute><tt:Second>0</tt:Second></tt:Time>"
+        "<tt:Date><tt:Year>2026</tt:Year><tt:Month>1</tt:Month><tt:Day>1</tt:Day></tt:Date></tt:LocalDateTime>"
         "</tds:SystemDateAndTime></tds:GetSystemDateAndTimeResponse>"
     )
 
