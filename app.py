@@ -300,22 +300,36 @@ def _build_go2rtc_source(camera: Dict[str, Any], stream: Dict[str, Any]) -> str:
         return raw_source
 
     if raw_source.startswith("exec:"):
-        command = raw_source
-        if "{output}" not in command and "-f rtsp" in command:
-            command = command.replace("rtsp://localhost:8554/" + str(stream.get("stream_name") or "").strip(), "{output}")
-            if command.endswith("rtsp://localhost:8554"):
-                command = f"{command}/{{output}}"
-            parts = command.rsplit(" ", 1)
-            if len(parts) == 2 and parts[1].startswith("rtsp://"):
-                command = f"{parts[0]} {{output}}"
-        if "{output}" not in command:
-            command = f"{command} {{output}}"
-        if "-f rtsp" in command and "-rtsp_transport" not in command:
-            command = command.replace("-f rtsp", "-rtsp_transport tcp -f rtsp")
-        return command
+        command_body = raw_source[len("exec:") :].strip()
+        try:
+            tokens = shlex.split(command_body)
+        except ValueError:
+            tokens = command_body.split()
+        input_source = ""
+        if "-i" in tokens:
+            idx = tokens.index("-i")
+            if idx + 1 < len(tokens):
+                input_source = tokens[idx + 1]
+        if input_source:
+            safe_input = shlex.quote(input_source)
+            return f"exec:ffmpeg -re -stream_loop -1 -i {safe_input} -c copy -rtsp_transport tcp -f rtsp {{output}}"
+        if "{output}" not in raw_source:
+            return f"{raw_source} {{output}}"
+        return raw_source.replace("-f rtsp", "-rtsp_transport tcp -f rtsp") if "-f rtsp" in raw_source and "-rtsp_transport" not in raw_source else raw_source
 
     safe_source = shlex.quote(raw_source)
     return f"exec:ffmpeg -re -stream_loop -1 -i {safe_source} -c copy -rtsp_transport tcp -f rtsp {{output}}"
+
+
+def _producer_status(stream_details: Dict[str, Any]) -> Dict[str, Any]:
+    producers = stream_details.get("producers") if isinstance(stream_details, dict) else []
+    producer = producers[0] if isinstance(producers, list) and producers and isinstance(producers[0], dict) else {}
+    return {
+        "active": bool(producer),
+        "url": producer.get("url", ""),
+        "type": producer.get("type", ""),
+        "medias": producer.get("medias", []),
+    }
 
 
 def _provision_camera_uuid_alias(camera: Dict[str, Any], schedule_retry: bool = True) -> Dict[str, Any]:
@@ -584,6 +598,50 @@ def go2rtc_health() -> Dict[str, Any]:
 @app.get("/go2rtc/streams")
 def go2rtc_streams() -> List[Dict[str, Any]]:
     return go2rtc_client.get_active_streams()
+
+
+@app.get("/go2rtc/diagnostics/{camera_uuid}")
+def go2rtc_stream_diagnostics(camera_uuid: str) -> Dict[str, Any]:
+    camera = registry_service.get_camera(camera_uuid)
+    if not camera:
+        raise HTTPException(status_code=404, detail="Câmera não encontrada")
+
+    snapshot = go2rtc_client.get_streams_snapshot()
+    streams_index: Dict[str, Dict[str, Any]] = snapshot.get("streams", {}) if isinstance(snapshot, dict) else {}
+    base_stream_name = ""
+    for stream in _iter_camera_streams(camera):
+        candidate = str(stream.get("stream_name") or "").strip()
+        if candidate:
+            base_stream_name = candidate
+            break
+
+    alias_details = streams_index.get(camera_uuid, {})
+    base_details = streams_index.get(base_stream_name, {}) if base_stream_name else {}
+    alias_producer = _producer_status(alias_details)
+    base_producer = _producer_status(base_details)
+
+    return {
+        "camera_uuid": camera_uuid,
+        "go2rtc_online": bool(snapshot.get("online")) if isinstance(snapshot, dict) else False,
+        "base_stream": {
+            "name": base_stream_name,
+            "registered": bool(base_stream_name and base_stream_name in streams_index),
+            "producer": base_producer,
+            "error": (base_details or {}).get("error", ""),
+            "urls": go2rtc_client.build_stream_urls(base_stream_name) if base_stream_name else {},
+        },
+        "uuid_alias": {
+            "name": camera_uuid,
+            "registered": camera_uuid in streams_index,
+            "producer": alias_producer,
+            "error": (alias_details or {}).get("error", ""),
+            "urls": go2rtc_client.build_stream_urls(camera_uuid),
+        },
+        "checks": {
+            "base_stream_ok": bool(base_stream_name and base_stream_name in streams_index and base_producer["active"]),
+            "alias_ok": bool(camera_uuid in streams_index and alias_producer["active"]),
+        },
+    }
 
 
 @app.get("/go2rtc/discovery")
