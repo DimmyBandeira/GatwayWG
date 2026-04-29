@@ -150,6 +150,7 @@ def _is_permissive_handshake_operation(operation: str) -> bool:
         "GetSystemDateAndTime",
         "GetServices",
         "GetCapabilities",
+        "GetDeviceInformation",
         "GetProfiles",
         "GetVideoSources",
         "GetVideoEncoderConfigurations",

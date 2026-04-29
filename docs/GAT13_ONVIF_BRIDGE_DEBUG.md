@@ -78,6 +78,7 @@ No `auth_mode=basic`, as operações iniciais abaixo passaram a ser permissivas 
 - `GetSystemDateAndTime`
 - `GetServices`
 - `GetCapabilities`
+- `GetDeviceInformation`
 
 Mantido:
 - `auth_mode=none` totalmente permissivo.

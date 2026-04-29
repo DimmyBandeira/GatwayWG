@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from onvif_bridge.config import load_config
 from onvif_bridge.soap_templates import (
     build_get_capabilities,
+    build_get_device_information,
     build_get_hostname,
     build_get_network_interfaces,
     build_get_profiles,
@@ -115,6 +116,11 @@ def test_soap_templates_include_expected_endpoints_and_rtsp_uri(tmp_path: Path):
     assert "MainStream" in build_get_profiles(device)
     assert "http://192.168.10.201:8080/onvif/device_service" in services_xml
     assert "http://192.168.10.201:8080/onvif/media_service" in services_xml
+    devinfo_xml = build_get_device_information(device)
+    assert "<tds:Manufacturer>GatwayWG</tds:Manufacturer>" in devinfo_xml
+    assert "<tds:Model>Virtual ONVIF Camera</tds:Model>" in devinfo_xml
+    assert "<tds:FirmwareVersion>1.0.0</tds:FirmwareVersion>" in devinfo_xml
+    assert "<tds:HardwareId>GatwayWG-ONVIF-Bridge</tds:HardwareId>" in devinfo_xml
 
 
 def test_get_stream_uri_intelbras_mode(tmp_path: Path):

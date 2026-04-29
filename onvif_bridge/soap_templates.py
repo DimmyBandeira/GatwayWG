@@ -18,11 +18,11 @@ def soap_envelope(body_xml: str) -> str:
 def build_get_device_information(device: BridgeDevice) -> str:
     return soap_envelope(
         "<tds:GetDeviceInformationResponse>"
-        f"<tds:Manufacturer>{device.manufacturer}</tds:Manufacturer>"
-        f"<tds:Model>{device.model}</tds:Model>"
+        "<tds:Manufacturer>GatwayWG</tds:Manufacturer>"
+        "<tds:Model>Virtual ONVIF Camera</tds:Model>"
         "<tds:FirmwareVersion>1.0.0</tds:FirmwareVersion>"
         f"<tds:SerialNumber>{device.camera_uuid}</tds:SerialNumber>"
-        "<tds:HardwareId>GATWAYWG-ONVIF-BRIDGE</tds:HardwareId>"
+        "<tds:HardwareId>GatwayWG-ONVIF-Bridge</tds:HardwareId>"
         "</tds:GetDeviceInformationResponse>"
     )
 
