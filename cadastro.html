@@ -408,9 +408,14 @@ function previewAvailability(cam){
 }
 
 function renderDvrBlock(cam){
-  const streamName=cam.stream_name||'sem-stream';
-  const rtsp=cam.urls?.rtsp_url||`rtsp://localhost:8554/${streamName}`;
-  return `📋 Usar no DVR/iVMS:<br/>Protocolo: RTSP<br/>IP: localhost<br/>Porta: 8554<br/>URL: ${escapeHtml(rtsp)}<br/>Canal sugerido: 1<br/>Buffer: Tempo real`;
+  const gatewayHost=(window.location.hostname||'<gateway_ip>').trim();
+  const channel=Number.isFinite(Number(cam.dvr_channel))?Number(cam.dvr_channel):1;
+  const subtypeMain=Number.isFinite(Number(cam.dvr_subtype_main))?Number(cam.dvr_subtype_main):0;
+  const subtypeSub=Number.isFinite(Number(cam.dvr_subtype_sub))?Number(cam.dvr_subtype_sub):1;
+  const uuidUrl=`rtsp://${gatewayHost}:8554/${cam.uuid||'sem-uuid'}`;
+  const dvrMain=`rtsp://${gatewayHost}:8554/cam/realmonitor?channel=${channel}&subtype=${subtypeMain}`;
+  const dvrSub=`rtsp://${gatewayHost}:8554/cam/realmonitor?channel=${channel}&subtype=${subtypeSub}`;
+  return `📋 URLs recomendadas:<br/>WebGuardião/UUID: ${escapeHtml(uuidUrl)}<br/>DVR Intelbras MAIN: ${escapeHtml(dvrMain)}<br/>DVR Intelbras SUB: ${escapeHtml(dvrSub)}<br/>Canal remoto: ${channel}`;
 }
 
 function renderList(){

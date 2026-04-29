@@ -1,0 +1,31 @@
+# go2rtc.clean.example.yaml
+# Exemplo mínimo para homologação DVR Intelbras (multi-canal por UUID)
+
+api:
+  listen: "0.0.0.0:1984"
+  origin: "*"
+
+rtsp:
+  listen: ":8554"
+  username: "admin"
+  password: "Conectar"
+
+webrtc:
+  listen: ":8555"
+
+streams:
+  # Base stream de arquivo (homologação local)
+  cam_uti_01-file-main:
+    - "exec:ffmpeg -re -stream_loop -1 -i video_teste.mp4 -c copy -rtsp_transport tcp -f rtsp {output}"
+
+  # Alias canônico por UUID (obrigatório)
+  3226ea01-0954-44bb-b782-506534f1a94a:
+    - "rtsp://127.0.0.1:8554/cam_uti_01-file-main"
+
+  # Câmera RTSP real (opcional)
+  # cam_uti_02-real-main:
+  #   - "rtsp://usuario:senha@192.168.10.50:554/Streaming/Channels/101"
+
+  # Alias UUID da câmera real (opcional)
+  # e1f9bd6f-1111-2222-3333-444455556666:
+  #   - "rtsp://127.0.0.1:8554/cam_uti_02-real-main"

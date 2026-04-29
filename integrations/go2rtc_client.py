@@ -133,6 +133,9 @@ class Go2RTCClient:
             "webrtc_url": f"ws://{self.webrtc_host}:{self.webrtc_port}/api/ws?src={safe_name}",
         }
 
+    def mask_url(self, url: str) -> str:
+        return self._mask_url(url)
+
     def upsert_stream(self, name: str, source_url: str) -> Dict[str, Any]:
         stream_name = (name or "").strip()
         src = (source_url or "").strip()

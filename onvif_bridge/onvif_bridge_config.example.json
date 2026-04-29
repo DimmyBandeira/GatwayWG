@@ -1,0 +1,44 @@
+{
+  "gateway_ip": "192.168.10.100",
+  "rtsp_port": 8554,
+  "http_port": 8080,
+  "auth_mode": "none",
+  "auth_user": "admin",
+  "auth_pass": "Conectar",
+  "devices": [
+    {
+      "virtual_ip": "192.168.10.106",
+      "camera_uuid": "3226ea01-0954-44bb-b782-506534f1a94a",
+      "name": "GatewayWG DVR Bridge 01",
+      "manufacturer": "GatwayWG",
+      "model": "Virtual ONVIF Camera",
+      "profile_token": "Profile_1",
+      "channel": 1,
+      "main_subtype": 0,
+      "sub_subtype": 1,
+      "rtsp_profile_mode": "uuid"
+    }
+  ],
+  "multi_channel_design_example": {
+    "devices": [
+      {
+        "virtual_ip": "192.168.10.106",
+        "name": "GatewayWG DVR Bridge 01",
+        "channels": [
+          {
+            "remote_channel": 1,
+            "camera_uuid": "3226ea01-0954-44bb-b782-506534f1a94a",
+            "name": "CAM UTI 01",
+            "stream_type": "main"
+          },
+          {
+            "remote_channel": 2,
+            "camera_uuid": "e1f9bd6f-1111-2222-3333-444455556666",
+            "name": "CAM UTI 02",
+            "stream_type": "main"
+          }
+        ]
+      }
+    ]
+  }
+}

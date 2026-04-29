@@ -66,6 +66,10 @@ Podem permanecer como fallback/laboratório, mas o core operacional do projeto �
 - **Fase 4:** VideoWall/monitor virtual.
 - **Fase 5:** DeepStream/batching, se necessário.
 
+> **Nota de governança (Jira x roadmap macro):**
+> no Jira operacional atual, o pacote chamado **GAT-4** consolida entrega RTSP para DVR/iVMS por `camera_uuid`.
+> O **VideoWall/monitor virtual** permanece no roadmap arquitetural (não é entregue neste pacote operacional).
+
 ## Estrutura de diretórios (resumo)
 
 ```text
@@ -120,3 +124,43 @@ GatwayWG/
 - `GET /go2rtc/discovery/onvif/scan` faz varredura controlada por faixa (ex.: `192.168.1.100-110`) usando go2rtc `src=onvif://...`.
 - `0.0.0.0` não é alvo de câmera; é apenas wildcard de interface local.
 - Limites: pode demorar e depende de ONVIF habilitado, firewall e credencial informada pelo operador.
+
+## GAT-4 (Jira) — Entrega RTSP para DVR/iVMS por UUID
+
+### Contrato canônico
+
+- URL RTSP canônica por câmera: `rtsp://<gateway_ip>:8554/<camera_uuid>`.
+- Endpoint de inventário operacional:
+  - `GET /cameras/` (retorna `canonical_urls` e `canonical_status` por câmera)
+  - `GET /cameras/{uuid}/urls` (retorna URLs prontas para copiar)
+
+### Exemplos de consumo
+
+- VLC (Mídia → Abrir fluxo de rede):
+  - `rtsp://192.168.1.10:8554/550e8400-e29b-41d4-a716-446655440000`
+- iVMS/DVR/VMS:
+  - Protocolo: RTSP
+  - Endereço: `192.168.1.10`
+  - Porta: `8554`
+  - Caminho/Canal remoto: `/<camera_uuid>`
+  - URL final: `rtsp://192.168.1.10:8554/<camera_uuid>`
+
+### Checklist de validação
+
+1. `GET /go2rtc/health` retorna `online=true`.
+2. `GET /cameras/` contém a câmera e `canonical_urls.rtsp_url` no formato por UUID.
+3. `GET /cameras/{uuid}/urls` retorna `canonical_status.status_label=online`.
+4. Abrir `canonical_urls.rtsp_url` no VLC.
+5. Validar que respostas do inventário não exibem senha em `source_url` (campo mascarado).
+
+### Troubleshooting básico
+
+- **go2rtc offline**
+  - Sintoma: `canonical_status.status_label=go2rtc_offline`.
+  - Ação: validar processo do go2rtc e endpoint `/go2rtc/health`.
+- **stream missing / UUID não publicado**
+  - Sintoma: `canonical_status.status_label=not_published`.
+  - Ação: executar `POST /cameras/{uuid}/publish` e revalidar `/cameras/{uuid}/urls`.
+- **UUID inexistente**
+  - Sintoma: `GET /cameras/{uuid}/urls` retorna `404`.
+  - Ação: conferir inventário em `GET /cameras/` e corrigir UUID de integração.

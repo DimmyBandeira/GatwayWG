@@ -8,6 +8,8 @@ api:
   origin: "*"
 rtsp:
   listen: ":8554" # Porta para streams RTSP limpos (WebGuardião e VMS/DVR/iVMS)
+  username: "admin"
+  password: "Conectar"
 
 webrtc:
   listen: ":8555" # Porta para transmissão de ultra baixa latência (monitoramento do operador)
@@ -19,7 +21,14 @@ webrtc:
 streams:
   
   # A. Emulação de Arquivo (Seu vídeo de teste rodando em loop infinito simulando câmera)
-  cam_teste_emulacao: exec:ffmpeg -re -stream_loop -1 -i video_teste.mp4 -c copy -f rtsp rtsp://localhost:8554/cam_teste_emulacao
+  cam_teste_emulacao:
+    - "exec:ffmpeg -re -stream_loop -1 -i video_teste.mp4 -c copy -rtsp_transport tcp -f rtsp {output}"
+
+  cam_uti_01-file-main:
+    - "exec:ffmpeg -re -stream_loop -1 -i video_teste.mp4 -c copy -rtsp_transport tcp -f rtsp {output}"
+
+  3226ea01-0954-44bb-b782-506534f1a94a:
+    - "rtsp://127.0.0.1:8554/cam_uti_01-file-main"
   
   # B. Câmera Física via RTSP Direto (Padrão clássico, informando o canal e porta na mão)
   cam_hospital_01: rtsp://admin:senha@192.168.1.100:554/Streaming/Channels/101
