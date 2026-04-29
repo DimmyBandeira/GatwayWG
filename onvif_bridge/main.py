@@ -4,7 +4,9 @@ import base64
 import logging
 import re
 from collections import deque
+from datetime import datetime, timezone
 from functools import lru_cache
+from threading import Lock
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
@@ -27,7 +29,8 @@ from onvif_bridge.soap_templates import (
 
 logger = logging.getLogger("onvif_bridge")
 app = FastAPI(title="GatwayWG ONVIF Bridge", version="0.2.0")
-LAST_REQUESTS: deque[dict[str, Any]] = deque(maxlen=200)
+LAST_REQUESTS: deque[dict[str, Any]] = deque(maxlen=50)
+LAST_REQUESTS_LOCK = Lock()
 
 
 @lru_cache(maxsize=1)
@@ -73,7 +76,8 @@ def _limited_body_for_log(body: str, cfg: BridgeConfig, limit: int = 1000) -> st
 
 
 def _register_request_log(entry: dict[str, Any]) -> None:
-    LAST_REQUESTS.appendleft(entry)
+    with LAST_REQUESTS_LOCK:
+        LAST_REQUESTS.appendleft(entry)
 
 
 def _get_device_or_404(request: Request, cfg: BridgeConfig) -> BridgeDevice:
@@ -168,8 +172,17 @@ def _dispatch_onvif(operation: str, device: BridgeDevice, cfg: BridgeConfig) -> 
 
 @app.middleware("http")
 async def request_logger_middleware(request: Request, call_next):
+    cfg = get_bridge_config()
+    body = (await request.body()).decode("utf-8", errors="ignore")
+    operation = _detect_operation(body)
     host = request.headers.get("host", "").split(":", 1)[0]
     client_ip = request.client.host if request.client else ""
+    soap_action_header = request.headers.get("soapaction")
+    content_type = request.headers.get("content-type", "")
+    body_preview = _limited_body_for_log(body, cfg)
+
+    request.state.detected_operation = operation
+
     logger.info(
         "request_received method=%s path=%s host=%s client_ip=%s",
         request.method,
@@ -177,7 +190,24 @@ async def request_logger_middleware(request: Request, call_next):
         host,
         client_ip,
     )
-    return await call_next(request)
+    response = await call_next(request)
+
+    _register_request_log(
+        {
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "method": request.method,
+            "path": request.url.path,
+            "host": host,
+            "client_ip": client_ip,
+            "content_type": content_type,
+            "soap_action_header": soap_action_header,
+            "soap_operation_detected": operation,
+            "body_preview": body_preview,
+            "status_code": response.status_code,
+        }
+    )
+
+    return response
 
 
 @app.get("/onvif-bridge/health")
@@ -199,14 +229,23 @@ def bridge_devices() -> dict[str, Any]:
 
 @app.get("/onvif-bridge/debug/last-requests")
 def bridge_debug_last_requests() -> dict[str, Any]:
-    return {"count": len(LAST_REQUESTS), "items": list(LAST_REQUESTS)}
+    with LAST_REQUESTS_LOCK:
+        items = list(LAST_REQUESTS)
+    return {"count": len(items), "items": items}
+
+
+@app.delete("/onvif-bridge/debug/last-requests")
+def bridge_debug_clear_last_requests() -> dict[str, Any]:
+    with LAST_REQUESTS_LOCK:
+        LAST_REQUESTS.clear()
+    return {"status": "cleared", "count": 0}
 
 
 async def _handle_onvif_request(request: Request) -> Response:
     cfg = get_bridge_config()
     body = (await request.body()).decode("utf-8", errors="ignore")
 
-    operation = _detect_operation(body)
+    operation = getattr(request.state, "detected_operation", _detect_operation(body))
     wsse_present = _detect_wsse_username_token(body)
     host = request.headers.get("host", "").split(":", 1)[0]
     client_ip = request.client.host if request.client else ""
@@ -216,19 +255,6 @@ async def _handle_onvif_request(request: Request) -> Response:
         _enforce_auth(request, cfg)
         device = _get_device_or_404(request, cfg)
     except HTTPException as exc:
-        _register_request_log(
-            {
-                "method": request.method,
-                "path": request.url.path,
-                "host": host,
-                "client_ip": client_ip,
-                "soap_action": operation,
-                "wsse_username_token": wsse_present,
-                "auth_mode": cfg.auth_mode,
-                "status_code": exc.status_code,
-                "body_preview": body_preview,
-            }
-        )
         logger.warning(
             "onvif_request_rejected method=%s path=%s host=%s client_ip=%s action=%s status=%s wsse=%s body=%s",
             request.method,
@@ -244,23 +270,6 @@ async def _handle_onvif_request(request: Request) -> Response:
 
     status_code, xml = _dispatch_onvif(operation, device, cfg)
     masked_stream = _mask_rtsp(f"rtsp://{cfg.auth_user}:{cfg.auth_pass}@{cfg.gateway_ip}:{cfg.rtsp_port}/{device.camera_uuid}")
-
-    _register_request_log(
-        {
-            "method": request.method,
-            "path": request.url.path,
-            "host": host,
-            "client_ip": client_ip,
-            "soap_action": operation,
-            "wsse_username_token": wsse_present,
-            "auth_mode": cfg.auth_mode,
-            "virtual_ip": device.virtual_ip,
-            "camera_uuid": device.camera_uuid,
-            "status_code": status_code,
-            "body_preview": body_preview,
-            "stream_masked": masked_stream,
-        }
-    )
 
     logger.info(
         "onvif_request_ok method=%s path=%s host=%s client_ip=%s op=%s virtual_ip=%s uuid=%s wsse=%s auth_mode=%s stream=%s body=%s",
