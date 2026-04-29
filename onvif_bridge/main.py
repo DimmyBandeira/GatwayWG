@@ -145,7 +145,22 @@ def _parse_basic_auth(header_value: str | None) -> tuple[str, str] | None:
 
 
 def _is_permissive_handshake_operation(operation: str) -> bool:
-    return operation in {"GetSystemDateAndTime", "GetServices", "GetCapabilities"}
+    return operation in {
+        "GetSystemDateAndTime",
+        "GetServices",
+        "GetCapabilities",
+        "GetProfiles",
+        "GetVideoSources",
+        "GetVideoEncoderConfigurations",
+        "GetStreamUri",
+    }
+
+
+def _extract_profile_token(xml_body: str) -> str | None:
+    match = re.search(r"<[^>]*ProfileToken[^>]*>([^<]+)</[^>]*ProfileToken[^>]*>", xml_body, flags=re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+    return None
 
 
 def _enforce_auth(request: Request, cfg: BridgeConfig, operation: str) -> None:
@@ -288,6 +303,7 @@ async def _handle_onvif_request(request: Request) -> Response:
 
     operation = getattr(request.state, "detected_operation", _detect_operation(body))
     wsse_present = _detect_wsse_username_token(body)
+    profile_token = _extract_profile_token(body)
     host = request.headers.get("host", "").split(":", 1)[0]
     client_ip = request.client.host if request.client else ""
     body_preview = _limited_body_for_log(body, cfg)
@@ -315,12 +331,13 @@ async def _handle_onvif_request(request: Request) -> Response:
     media_xaddr = f"http://{device.virtual_ip}:{cfg.http_port}/onvif/media_service"
 
     logger.info(
-        "onvif_request_ok method=%s path=%s host=%s client_ip=%s op=%s virtual_ip=%s uuid=%s wsse=%s auth_mode=%s device_xaddr=%s media_xaddr=%s stream=%s body=%s",
+        "onvif_request_ok method=%s path=%s host=%s client_ip=%s op=%s profile_token=%s virtual_ip=%s uuid=%s wsse=%s auth_mode=%s device_xaddr=%s media_xaddr=%s stream=%s body=%s",
         request.method,
         request.url.path,
         host,
         client_ip,
         operation,
+        profile_token,
         device.virtual_ip,
         device.camera_uuid,
         wsse_present,

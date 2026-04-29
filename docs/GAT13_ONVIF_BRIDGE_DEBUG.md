@@ -39,6 +39,12 @@ Exemplo validado em campo:
 - `GetSystemDateAndTime`
 - `GetServices`
 - `GetCapabilities`
+- `GetProfiles`
+
+## Avanço observado
+
+- O DVR já avançou até `GetProfiles`, confirmando que rede, rota e handshake inicial ONVIF DEVICE estão operacionais.
+- Hipótese principal nesta etapa: `GetProfilesResponse` incompleto/incompatível para Intelbras.
 
 ## Diagnóstico do 401
 
@@ -63,6 +69,11 @@ Mantido:
 ## Próximo fluxo esperado
 
 `GetSystemDateAndTime -> GetServices -> GetCapabilities -> GetProfiles -> GetStreamUri`
+
+## Critério técnico da próxima etapa
+
+- Confirmar no `/onvif-bridge/debug/last-requests` o primeiro `GetStreamUri`.
+- Em caso de novo bloqueio, identificar a operação imediatamente anterior e ajustar payload MEDIA mínimo.
 
 ## Observabilidade mantida
 

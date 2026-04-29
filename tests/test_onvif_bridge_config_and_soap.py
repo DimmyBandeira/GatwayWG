@@ -9,6 +9,7 @@ from onvif_bridge.soap_templates import (
     build_get_capabilities,
     build_get_hostname,
     build_get_network_interfaces,
+    build_get_profiles,
     build_get_scopes,
     build_get_services,
     build_get_stream_uri,
@@ -101,5 +102,8 @@ def test_soap_templates_include_expected_endpoints_and_rtsp_uri(tmp_path: Path):
     assert "192.168.10.201" in netif_xml
     assert "GetScopesResponse" in scopes_xml
     assert "GetVideoEncoderConfigurationsResponse" in venc_xml
+    assert "VideoEncoder_1" in venc_xml
+    assert "<tt:H264Profile>High</tt:H264Profile>" in venc_xml
+    assert "Profile_1" in build_get_profiles(device)
     assert "http://192.168.10.201:8080/onvif/device_service" in services_xml
     assert "http://192.168.10.201:8080/onvif/media_service" in services_xml

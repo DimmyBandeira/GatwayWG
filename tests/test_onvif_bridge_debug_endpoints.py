@@ -39,4 +39,7 @@ def test_permissive_handshake_operations():
     assert bridge_main._is_permissive_handshake_operation("GetSystemDateAndTime") is True
     assert bridge_main._is_permissive_handshake_operation("GetServices") is True
     assert bridge_main._is_permissive_handshake_operation("GetCapabilities") is True
-    assert bridge_main._is_permissive_handshake_operation("GetProfiles") is False
+    assert bridge_main._is_permissive_handshake_operation("GetProfiles") is True
+    assert bridge_main._is_permissive_handshake_operation("GetVideoSources") is True
+    assert bridge_main._is_permissive_handshake_operation("GetVideoEncoderConfigurations") is True
+    assert bridge_main._is_permissive_handshake_operation("GetStreamUri") is True
