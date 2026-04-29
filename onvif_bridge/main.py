@@ -2,30 +2,52 @@ from __future__ import annotations
 
 import base64
 import logging
+import os
 import re
 from collections import deque
 from datetime import datetime, timezone
 from functools import lru_cache
+from pathlib import Path
 from threading import Lock
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
 
-from onvif_bridge.config import BridgeConfig, BridgeConfigError, BridgeDevice, load_config
-from onvif_bridge.soap_templates import (
-    build_fault,
-    build_get_capabilities,
-    build_get_device_information,
-    build_get_hostname,
-    build_get_network_interfaces,
-    build_get_profiles,
-    build_get_scopes,
-    build_get_services,
-    build_get_stream_uri,
-    build_get_system_date_and_time,
-    build_get_video_encoder_configurations,
-    build_get_video_sources,
-)
+if __package__ in {None, ""}:
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from onvif_bridge.config import BridgeConfig, BridgeConfigError, BridgeDevice, load_config
+    from onvif_bridge.soap_templates import (
+        build_fault,
+        build_get_capabilities,
+        build_get_device_information,
+        build_get_hostname,
+        build_get_network_interfaces,
+        build_get_profiles,
+        build_get_scopes,
+        build_get_services,
+        build_get_stream_uri,
+        build_get_system_date_and_time,
+        build_get_video_encoder_configurations,
+        build_get_video_sources,
+    )
+else:
+    from .config import BridgeConfig, BridgeConfigError, BridgeDevice, load_config
+    from .soap_templates import (
+        build_fault,
+        build_get_capabilities,
+        build_get_device_information,
+        build_get_hostname,
+        build_get_network_interfaces,
+        build_get_profiles,
+        build_get_scopes,
+        build_get_services,
+        build_get_stream_uri,
+        build_get_system_date_and_time,
+        build_get_video_encoder_configurations,
+        build_get_video_sources,
+    )
 
 logger = logging.getLogger("onvif_bridge")
 app = FastAPI(title="GatwayWG ONVIF Bridge", version="0.2.0")
@@ -35,7 +57,26 @@ LAST_REQUESTS_LOCK = Lock()
 
 @lru_cache(maxsize=1)
 def get_bridge_config() -> BridgeConfig:
-    return load_config()
+    try:
+        return load_config()
+    except BridgeConfigError as exc:
+        logger.warning("Falha ao carregar configuração do ONVIF Bridge: %s", exc)
+        default_port = int(os.getenv("ONVIF_BRIDGE_HTTP_PORT", "8080"))
+        return BridgeConfig(
+            gateway_ip="127.0.0.1",
+            rtsp_port=8554,
+            http_port=default_port,
+            auth_user="admin",
+            auth_pass="CHANGE_ME",
+            auth_mode="none",
+            devices=[],
+        )
+
+
+@app.on_event("startup")
+def on_startup() -> None:
+    cfg = get_bridge_config()
+    logger.info("ONVIF Bridge iniciado com sucesso na porta %s", cfg.http_port)
 
 
 def _mask_rtsp(uri: str) -> str:
@@ -212,13 +253,7 @@ async def request_logger_middleware(request: Request, call_next):
 
 @app.get("/onvif-bridge/health")
 def bridge_health() -> dict[str, Any]:
-    cfg = get_bridge_config()
-    return {
-        "status": "ok",
-        "http_port": cfg.http_port,
-        "devices_count": len(cfg.devices),
-        "auth_mode": cfg.auth_mode,
-    }
+    return {"status": "ok"}
 
 
 @app.get("/onvif-bridge/devices")
@@ -308,9 +343,6 @@ async def onvif_media_service(request: Request) -> Response:
 if __name__ == "__main__":
     import uvicorn
 
-    try:
-        cfg = get_bridge_config()
-    except BridgeConfigError as exc:
-        raise SystemExit(f"Falha de configuração do ONVIF Bridge: {exc}")
-
+    cfg = get_bridge_config()
+    logger.info("ONVIF Bridge iniciado com sucesso na porta %s", cfg.http_port)
     uvicorn.run(app, host="0.0.0.0", port=cfg.http_port)

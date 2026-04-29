@@ -4,6 +4,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import onvif_bridge.main as bridge_main
+from onvif_bridge.config import BridgeConfigError
 
 
 def test_last_requests_ring_buffer_limit_and_clear():
@@ -21,3 +22,14 @@ def test_last_requests_ring_buffer_limit_and_clear():
     cleared = bridge_main.bridge_debug_clear_last_requests()
     assert cleared["status"] == "cleared"
     assert bridge_main.bridge_debug_last_requests()["count"] == 0
+
+
+def test_fallback_config_when_file_missing(monkeypatch):
+    bridge_main.get_bridge_config.cache_clear()
+    monkeypatch.setattr(bridge_main, "load_config", lambda: (_ for _ in ()).throw(BridgeConfigError("missing")))
+
+    cfg = bridge_main.get_bridge_config()
+    assert cfg.http_port == 8080
+    assert cfg.devices == []
+    assert cfg.auth_mode == "none"
+    assert bridge_main.bridge_health() == {"status": "ok"}
