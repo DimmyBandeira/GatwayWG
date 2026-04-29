@@ -45,3 +45,22 @@ def test_permissive_handshake_operations():
     assert bridge_main._is_permissive_handshake_operation("GetVideoSources") is True
     assert bridge_main._is_permissive_handshake_operation("GetVideoEncoderConfigurations") is True
     assert bridge_main._is_permissive_handshake_operation("GetStreamUri") is True
+
+
+def test_dispatch_set_system_date_and_time_noop_response():
+    cfg = bridge_main.get_bridge_config()
+    device = bridge_main.BridgeDevice(
+        virtual_ip="192.168.10.201",
+        camera_uuid="uuid-camera-1",
+        name="Cam 1",
+        manufacturer="GatwayWG",
+        model="Virtual ONVIF Camera",
+        profile_token="Profile_1",
+        channel=1,
+        main_subtype=0,
+        sub_subtype=1,
+        rtsp_profile_mode="uuid",
+    )
+    status_code, xml = bridge_main._dispatch_onvif("SetSystemDateAndTime", device, cfg, "192.168.10.201")
+    assert status_code == 200
+    assert "SetSystemDateAndTimeResponse" in xml

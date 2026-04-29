@@ -49,6 +49,7 @@ else:
         build_get_system_date_and_time,
         build_get_video_encoder_configurations,
         build_get_video_sources,
+        build_set_system_date_and_time,
     )
 
 logger = logging.getLogger("onvif_bridge")
