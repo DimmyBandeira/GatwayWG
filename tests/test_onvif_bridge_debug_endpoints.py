@@ -76,3 +76,30 @@ def test_detect_operation_get_scopes():
     </s:Envelope>
     """
     assert bridge_main._detect_operation(xml) == "GetScopes"
+
+
+def test_detect_operation_details_for_media_variants():
+    xml = """
+    <s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
+      <s:Body>
+        <trt:GetVideoEncoderConfigurationOptions xmlns:trt="http://www.onvif.org/ver10/media/wsdl"/>
+      </s:Body>
+    </s:Envelope>
+    """
+    operation, detected_by = bridge_main._detect_operation_details(xml)
+    assert operation == "GetVideoEncoderConfigurationOptions"
+    assert detected_by == "operation_name_scan"
+
+
+def test_detect_operation_details_fallback_to_first_tag():
+    xml = """
+    <s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
+      <s:Body>
+        <trt:VendorSpecificMediaOp xmlns:trt="http://www.onvif.org/ver10/media/wsdl"/>
+      </s:Body>
+    </s:Envelope>
+    """
+    operation, detected_by = bridge_main._detect_operation_details(xml)
+    assert operation == "VendorSpecificMediaOp"
+    assert detected_by == "soap_body_first_tag"
+

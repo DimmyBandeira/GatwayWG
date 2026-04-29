@@ -212,6 +212,11 @@ def _enforce_auth(request: Request, cfg: BridgeConfig, operation: str) -> None:
 
 
 def _detect_operation(xml_body: str) -> str:
+    operation, _ = _detect_operation_details(xml_body)
+    return operation
+
+
+def _detect_operation_details(xml_body: str) -> tuple[str, str]:
     operations = [
         "GetSystemDateAndTime",
         "SetSystemDateAndTime",
@@ -221,15 +226,29 @@ def _detect_operation(xml_body: str) -> str:
         "GetDeviceInformation",
         "GetCapabilities",
         "GetServices",
+        "GetProfile",
         "GetProfiles",
         "GetVideoSources",
+        "GetVideoSourceConfigurations",
         "GetVideoEncoderConfigurations",
+        "GetVideoEncoderConfigurationOptions",
+        "GetCompatibleVideoEncoderConfigurations",
+        "GetSnapshotUri",
+        "GetOSDs",
+        "GetAudioSources",
+        "GetAudioEncoderConfigurations",
         "GetStreamUri",
     ]
     for operation in operations:
         if operation in xml_body:
-            return operation
-    return "unknown"
+            return operation, "operation_name_scan"
+    first_tag = _detect_soap_body_first_tag(xml_body)
+    if first_tag:
+        raw = first_tag.split("}", 1)[-1]
+        raw = raw.split(":", 1)[-1]
+        if raw:
+            return raw, "soap_body_first_tag"
+    return "unknown", "none"
 
 
 def _extract_set_datetime_metadata(xml_body: str) -> tuple[str | None, str | None]:
@@ -273,7 +292,7 @@ async def request_logger_middleware(request: Request, call_next):
     cfg = get_bridge_config()
     body = (await request.body()).decode("utf-8", errors="ignore")
     first_tag = _detect_soap_body_first_tag(body)
-    operation = _detect_operation(body)
+    operation, detected_by = _detect_operation_details(body)
     host = request.headers.get("host", "").split(":", 1)[0]
     client_ip = request.client.host if request.client else ""
     soap_action_header = request.headers.get("soapaction")
@@ -301,8 +320,10 @@ async def request_logger_middleware(request: Request, call_next):
             "content_type": content_type,
             "soap_action_header": soap_action_header,
             "soap_operation_detected": operation,
+            "soap_operation_detected_by": detected_by,
             "soap_body_first_tag": first_tag,
             "body_preview": body_preview,
+            "raw_body_start": _limited_body_for_log(body, cfg, limit=2000),
             "status_code": response.status_code,
         }
     )
@@ -366,8 +387,9 @@ async def _handle_onvif_request(request: Request) -> Response:
         raise
 
     status_code, xml = _dispatch_onvif(operation, device, cfg, device.virtual_ip)
-    if operation == "unknown" and request.url.path.lower().startswith("/onvif/media"):
+    if status_code >= 400 and request.url.path.lower().startswith("/onvif/media"):
         status_code = 200
+        xml = build_fault(f"Unsupported operation: {operation}")
     masked_stream = _mask_rtsp(f"rtsp://{cfg.auth_user}:{cfg.auth_pass}@{cfg.gateway_ip}:{cfg.rtsp_port}/{device.camera_uuid}")
     device_xaddr = f"http://{device.virtual_ip}:{cfg.http_port}/onvif/device_service"
     media_xaddr = f"http://{device.virtual_ip}:{cfg.http_port}/onvif/media_service"
@@ -406,6 +428,8 @@ async def _handle_onvif_request(request: Request) -> Response:
 
     if operation == "GetScopes":
         logger.info("operation=GetScopes wsse=%s status=%s", wsse_present, status_code)
+    if operation == "GetStreamUri":
+        logger.info("operation=GetStreamUri stream=%s status=%s", masked_stream, status_code)
 
     if device.rtsp_profile_mode == "intelbras_compatible":
         logger.warning(
